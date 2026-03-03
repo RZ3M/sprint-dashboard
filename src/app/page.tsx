@@ -154,7 +154,7 @@ export default function Home() {
               <p className="p-6 text-zinc-500 text-center">No tasks in this sprint</p>
             ) : (
               <ul className="divide-y divide-zinc-700/50">
-                {currentTasks.slice(0, focusMode ? 20 : 10).map((task, i) => (
+                {currentTasks.map((task, i) => (
                   <li key={task.id || i} className="p-4 hover:bg-zinc-800/50 transition-colors">
                     <div className="flex items-start gap-3">
                       <span className={`px-2 py-0.5 text-xs rounded ${

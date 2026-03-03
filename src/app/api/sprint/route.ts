@@ -2,34 +2,46 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-export async function GET() {
-  const SPRINT_DATA_PATH = path.join(process.cwd(), 'data', 'sprints.json');
-  
-  try {
-    if (fs.existsSync(SPRINT_DATA_PATH)) {
-      const data = fs.readFileSync(SPRINT_DATA_PATH, 'utf8');
-      return NextResponse.json(JSON.parse(data));
+const SPRINT_DATA_PATH = path.join(process.cwd(), 'data', 'sprints.json');
+const USER_STATE_PATH = path.join(process.cwd(), 'data', 'user-state.json');
+
+function getBuckets() {
+  if (fs.existsSync(SPRINT_DATA_PATH)) {
+    const data = JSON.parse(fs.readFileSync(SPRINT_DATA_PATH, 'utf8'));
+    if (data.urgent || data.admin || data.creative) {
+      return data;
     }
-    return NextResponse.json({ urgent: [], admin: [], creative: [] });
+  }
+  return { urgent: [], admin: [], creative: [] };
+}
+
+export async function GET() {
+  try {
+    const buckets = getBuckets();
+    
+    let userState = { currentSprint: 'admin', energyLevel: 'medium' };
+    if (fs.existsSync(USER_STATE_PATH)) {
+      userState = JSON.parse(fs.readFileSync(USER_STATE_PATH, 'utf8'));
+    }
+    
+    return NextResponse.json({ ...buckets, ...userState });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to load sprint data' }, { status: 500 });
+    return NextResponse.json({ urgent: [], admin: [], creative: [], currentSprint: 'admin', energyLevel: 'medium' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
-  const SPRINT_DATA_PATH = path.join(process.cwd(), 'data', 'sprints.json');
-  
   try {
     const body = await request.json();
     const { currentSprint, energyLevel } = body;
     
-    const data = {
+    const userState = {
       currentSprint,
       energyLevel,
       updatedAt: new Date().toISOString()
     };
     
-    fs.writeFileSync(SPRINT_DATA_PATH, JSON.stringify(data, null, 2));
+    fs.writeFileSync(USER_STATE_PATH, JSON.stringify(userState, null, 2));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update sprint' }, { status: 500 });
