@@ -2,27 +2,34 @@
 
 import { useState, useEffect } from "react";
 
-type SprintBucket = "urgent" | "admin" | "creative";
+type SprintBucket = "urgent" | "admin" | "creative" | "deadline";
 
 interface Task {
-  type: string;
   id: string;
-  subject?: string;
-  summary?: string;
-  from?: string;
-  date?: string;
-  start?: string;
-  end?: string;
+  title: string;
+  description: string;
+  category: SprintBucket;
+  source: string;
+  deadline: string | null;
+  completed: boolean;
+  created_at: string;
 }
 
 interface SprintData {
   urgent: Task[];
   admin: Task[];
   creative: Task[];
+  deadline: Task[];
+  currentSprint?: SprintBucket;
+  energyLevel?: "low" | "medium" | "high";
+  highlightTaskId?: string | null;
+  highlightCompleted?: boolean;
 }
 
 export default function Home() {
-  const [sprintData, setSprintData] = useState<SprintData>({ urgent: [], admin: [], creative: [] });
+  const [sprintData, setSprintData] = useState<SprintData>({ 
+    urgent: [], admin: [], creative: [], deadline: [] 
+  });
   const [currentSprint, setCurrentSprint] = useState<SprintBucket>("admin");
   const [energyLevel, setEnergyLevel] = useState<"low" | "medium" | "high">("medium");
   const [focusMode, setFocusMode] = useState(false);
@@ -37,8 +44,10 @@ export default function Home() {
     try {
       const res = await fetch("/api/sprint");
       const data = await res.json();
-      if (data.urgent || data.admin || data.creative) {
+      if (data.urgent || data.admin || data.creative || data.deadline) {
         setSprintData(data);
+        if (data.currentSprint) setCurrentSprint(data.currentSprint);
+        if (data.energyLevel) setEnergyLevel(data.energyLevel);
       }
     } catch (error) {
       console.error("Failed to load sprint data:", error);
@@ -72,8 +81,22 @@ export default function Home() {
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentSprint: level === "high" ? "creative" : level === "low" ? "admin" : "creative", energyLevel: level }),
+      body: JSON.stringify({ 
+        action: "updateEnergy",
+        energyLevel: level,
+        currentSprint: level === "high" ? "creative" : level === "low" ? "admin" : "creative"
+      }),
     });
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    await fetch("/api/sprint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "completeTask", taskId }),
+    });
+    // Refresh data
+    fetchSprintData();
   };
 
   const currentTasks = sprintData[currentSprint] || [];
@@ -81,7 +104,8 @@ export default function Home() {
   const bucketColors = {
     urgent: "bg-red-500",
     admin: "bg-yellow-500", 
-    creative: "bg-blue-500"
+    creative: "bg-blue-500",
+    deadline: "bg-purple-500"
   };
 
   if (loading) {
@@ -154,7 +178,7 @@ export default function Home() {
           
           {/* Bucket Tabs */}
           <div className="flex gap-2 mb-4">
-            {(["urgent", "admin", "creative"] as const).map((bucket) => (
+            {(["urgent", "admin", "creative", "deadline"] as const).map((bucket) => (
               <button
                 key={bucket}
                 onClick={() => !focusMode && setCurrentSprint(bucket)}
@@ -176,27 +200,29 @@ export default function Home() {
               <p className="p-6 text-zinc-500 text-center">No tasks in this sprint</p>
             ) : (
               <ul className="divide-y divide-zinc-700/50">
-                {currentTasks.map((task, i) => (
-                  <li key={task.id || i} className="p-4 hover:bg-zinc-800/50 transition-colors">
+                {currentTasks.map((task) => (
+                  <li key={task.id} className="p-4 hover:bg-zinc-800/50 transition-colors">
                     <div className="flex items-start gap-3">
-                      <span className={`px-2 py-0.5 text-xs rounded ${
-                        task.type === "email" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"
-                      }`}>
-                        {task.type}
-                      </span>
+                      <button
+                        onClick={() => handleCompleteTask(task.id)}
+                        className="mt-1 w-5 h-5 rounded-full border-2 border-zinc-600 hover:border-green-500 transition-colors flex-shrink-0"
+                      />
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
-                          {task.subject || task.summary}
-                        </p>
-                        {task.from && (
-                          <p className="text-sm text-zinc-500 truncate">{task.from}</p>
+                        <p className="font-medium">{task.title}</p>
+                        {task.description && (
+                          <p className="text-sm text-zinc-500">{task.description}</p>
                         )}
-                        {task.start && (
-                          <p className="text-sm text-zinc-500">
-                            {new Date(task.start).toLocaleString()}
+                        {task.deadline && (
+                          <p className="text-sm text-purple-400">
+                            📅 Due: {new Date(task.deadline).toLocaleDateString()}
                           </p>
                         )}
                       </div>
+                      <span className={`px-2 py-0.5 text-xs rounded ${
+                        task.source === 'brain_dump' ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-400"
+                      }`}>
+                        {task.source}
+                      </span>
                     </div>
                   </li>
                 ))}
@@ -209,7 +235,7 @@ export default function Home() {
         {!focusMode && (
           <section>
             <h2 className="text-lg font-semibold mb-4">📊 Today&apos;s Overview</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
                 <p className="text-3xl font-bold text-red-400">{sprintData.urgent?.length || 0}</p>
                 <p className="text-sm text-zinc-500">Urgent</p>
@@ -221,6 +247,10 @@ export default function Home() {
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
                 <p className="text-3xl font-bold text-blue-400">{sprintData.creative?.length || 0}</p>
                 <p className="text-sm text-zinc-500">Creative</p>
+              </div>
+              <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
+                <p className="text-3xl font-bold text-purple-400">{sprintData.deadline?.length || 0}</p>
+                <p className="text-sm text-zinc-500">Deadline</p>
               </div>
             </div>
           </section>
@@ -248,11 +278,11 @@ export default function Home() {
           </div>
           <div className="flex-1 overflow-auto p-6">
             <ul className="max-w-2xl mx-auto space-y-2">
-              {currentTasks.map((task, i) => (
-                <li key={task.id || i} className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
+              {currentTasks.map((task) => (
+                <li key={task.id} className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
                   <div className="flex items-center gap-3">
                     <span className="text-zinc-600">○</span>
-                    <span className="text-lg">{task.subject || task.summary}</span>
+                    <span className="text-lg">{task.title}</span>
                   </div>
                 </li>
               ))}

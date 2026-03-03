@@ -1,49 +1,114 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const SPRINT_DATA_PATH = path.join(process.cwd(), 'data', 'sprints.json');
-const USER_STATE_PATH = path.join(process.cwd(), 'data', 'user-state.json');
-
-function getBuckets() {
-  if (fs.existsSync(SPRINT_DATA_PATH)) {
-    const data = JSON.parse(fs.readFileSync(SPRINT_DATA_PATH, 'utf8'));
-    if (data.urgent || data.admin || data.creative) {
-      return data;
-    }
-  }
-  return { urgent: [], admin: [], creative: [] };
-}
+import { createAdminClient } from '@/utils/supabase/admin';
 
 export async function GET() {
   try {
-    const buckets = getBuckets();
+    const supabase = createAdminClient();
     
-    let userState = { currentSprint: 'admin', energyLevel: 'medium' };
-    if (fs.existsSync(USER_STATE_PATH)) {
-      userState = JSON.parse(fs.readFileSync(USER_STATE_PATH, 'utf8'));
+    // Get today's tasks grouped by category
+    const { data: tasks, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('completed', false)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Failed to fetch tasks:', error);
+      return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
     }
-    
-    return NextResponse.json({ ...buckets, ...userState });
+
+    // Group by category
+    const buckets = {
+      urgent: tasks?.filter(t => t.category === 'urgent') || [],
+      admin: tasks?.filter(t => t.category === 'admin') || [],
+      creative: tasks?.filter(t => t.category === 'creative') || [],
+      deadline: tasks?.filter(t => t.category === 'deadline') || [],
+    };
+
+    // Get user state (current sprint, energy level)
+    const today = new Date().toISOString().split('T')[0];
+    const { data: dailyLog } = await supabase
+      .from('daily_logs')
+      .select('*')
+      .eq('date', today)
+      .single();
+
+    return NextResponse.json({
+      ...buckets,
+      currentSprint: dailyLog?.sprints_completed || 'admin',
+      energyLevel: dailyLog?.energy_level || 'medium',
+      highlightTaskId: dailyLog?.highlight_task_id || null,
+      highlightCompleted: dailyLog?.highlight_completed || false,
+    });
+
   } catch (error) {
-    return NextResponse.json({ urgent: [], admin: [], creative: [], currentSprint: 'admin', energyLevel: 'medium' }, { status: 500 });
+    console.error('Sprint API error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { currentSprint, energyLevel } = body;
+    const { currentSprint, energyLevel, action } = body;
     
-    const userState = {
-      currentSprint,
-      energyLevel,
-      updatedAt: new Date().toISOString()
-    };
-    
-    fs.writeFileSync(USER_STATE_PATH, JSON.stringify(userState, null, 2));
-    return NextResponse.json({ success: true });
+    const supabase = createAdminClient();
+    const today = new Date().toISOString().split('T')[0];
+
+    if (action === 'setHighlight') {
+      // Set daily highlight task
+      const { taskId } = body;
+      const { error } = await supabase
+        .from('daily_logs')
+        .upsert({
+          date: today,
+          highlight_task_id: taskId,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        console.error('Failed to set highlight:', error);
+        return NextResponse.json({ error: 'Failed to set highlight' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'completeTask') {
+      // Mark task as completed
+      const { taskId } = body;
+      const { error } = await supabase
+        .from('tasks')
+        .update({ completed: true, updated_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (error) {
+        console.error('Failed to complete task:', error);
+        return NextResponse.json({ error: 'Failed to complete task' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'updateEnergy') {
+      // Update energy level for today
+      const { error } = await supabase
+        .from('daily_logs')
+        .upsert({
+          date: today,
+          energy_level: energyLevel,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        console.error('Failed to update energy:', error);
+        return NextResponse.json({ error: 'Failed to update energy' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to update sprint' }, { status: 500 });
+    console.error('Sprint POST error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
