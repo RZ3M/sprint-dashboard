@@ -5,11 +5,10 @@ export async function GET() {
   try {
     const supabase = createAdminClient();
     
-    // Get today's tasks grouped by category
+    // Get ALL tasks (both completed and uncompleted)
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('completed', false)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -17,12 +16,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
     }
 
-    // Group by category
+    // Group uncompleted by category
     const buckets = {
-      urgent: tasks?.filter(t => t.category === 'urgent') || [],
-      admin: tasks?.filter(t => t.category === 'admin') || [],
-      creative: tasks?.filter(t => t.category === 'creative') || [],
-      deadline: tasks?.filter(t => t.category === 'deadline') || [],
+      urgent: (tasks || []).filter(t => t.category === 'urgent' && !t.completed),
+      admin: (tasks || []).filter(t => t.category === 'admin' && !t.completed),
+      creative: (tasks || []).filter(t => t.category === 'creative' && !t.completed),
+      deadline: (tasks || []).filter(t => t.category === 'deadline' && !t.completed),
     };
 
     // Get user state (current sprint, energy level)
@@ -56,7 +55,6 @@ export async function POST(request: Request) {
     const today = new Date().toISOString().split('T')[0];
 
     if (action === 'setHighlight') {
-      // Set daily highlight task
       const { taskId } = body;
       const { error } = await supabase
         .from('daily_logs')
@@ -74,7 +72,6 @@ export async function POST(request: Request) {
     }
 
     if (action === 'completeTask') {
-      // Mark task as completed
       const { taskId } = body;
       const { error } = await supabase
         .from('tasks')
@@ -88,8 +85,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'uncompleteTask') {
+      const { taskId } = body;
+      const { error } = await supabase
+        .from('tasks')
+        .update({ completed: false, updated_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (error) {
+        console.error('Failed to uncomplete task:', error);
+        return NextResponse.json({ error: 'Failed to uncomplete task' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'updateEnergy') {
-      // Update energy level for today
       const { error } = await supabase
         .from('daily_logs')
         .upsert({

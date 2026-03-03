@@ -35,6 +35,7 @@ export default function Home() {
   const [focusMode, setFocusMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     fetchSprintData();
@@ -71,7 +72,6 @@ export default function Home() {
   const handleEnergySelect = async (level: "low" | "medium" | "high") => {
     setEnergyLevel(level);
     
-    // Auto-suggest sprint based on energy
     if (level === "high") {
       setCurrentSprint("creative");
     } else if (level === "low") {
@@ -89,17 +89,32 @@ export default function Home() {
     });
   };
 
-  const handleCompleteTask = async (taskId: string) => {
+  const handleCompleteTask = async (taskId: string, currentlyCompleted: boolean) => {
+    // Toggle completion status
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "completeTask", taskId }),
+      body: JSON.stringify({ 
+        action: currentlyCompleted ? "uncompleteTask" : "completeTask", 
+        taskId 
+      }),
     });
-    // Refresh data
     fetchSprintData();
   };
 
-  const currentTasks = sprintData[currentSprint] || [];
+  // Get completed tasks count
+  const getCompletedCount = () => {
+    const allTasks = [...sprintData.urgent, ...sprintData.admin, ...sprintData.creative, ...sprintData.deadline];
+    return allTasks.filter(t => t.completed).length;
+  };
+
+  // Get completed tasks
+  const getCompletedTasks = () => {
+    const allTasks = [...sprintData.urgent, ...sprintData.admin, ...sprintData.creative, ...sprintData.deadline];
+    return allTasks.filter(t => t.completed);
+  };
+
+  const currentTasks = (sprintData[currentSprint] || []).filter(t => !t.completed);
 
   const bucketColors = {
     urgent: "bg-red-500",
@@ -116,6 +131,8 @@ export default function Home() {
     );
   }
 
+  const completedCount = getCompletedCount();
+
   return (
     <div className={`min-h-screen bg-zinc-900 text-zinc-100 ${focusMode ? 'overflow-hidden' : ''}`}>
       {/* Header */}
@@ -123,6 +140,14 @@ export default function Home() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <h1 className="text-2xl font-bold">🏃 Sprint Dashboard</h1>
           <div className="flex gap-2">
+            {completedCount > 0 && (
+              <button
+                onClick={() => setShowCompleted(!showCompleted)}
+                className="px-4 py-2 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              >
+                {showCompleted ? "✓ Done" : `Done (${completedCount})`}
+              </button>
+            )}
             <button
               onClick={handleSync}
               disabled={syncing}
@@ -143,6 +168,45 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* Completed Tasks Section */}
+      {showCompleted && completedCount > 0 && !focusMode && (
+        <section className="border-b border-zinc-800 bg-zinc-900/50">
+          <div className="max-w-4xl mx-auto p-6">
+            <h2 className="text-lg font-semibold mb-4 text-zinc-400">✓ Completed</h2>
+            <div className="bg-zinc-800/30 rounded-lg border border-zinc-700/30">
+              <ul className="divide-y divide-zinc-700/30">
+                {getCompletedTasks().map((task) => (
+                  <li key={task.id} className="p-4 hover:bg-zinc-800/30 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => handleCompleteTask(task.id, task.completed)}
+                        className="mt-1 w-5 h-5 rounded-full border-2 border-green-500 bg-green-500 flex-shrink-0 flex items-center justify-center"
+                      >
+                        <span className="text-black text-xs">✓</span>
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium line-through text-zinc-500">{task.title}</p>
+                        {task.description && (
+                          <p className="text-sm text-zinc-600 line-through">{task.description}</p>
+                        )}
+                      </div>
+                      <span className={`px-2 py-0.5 text-xs rounded ${
+                        task.category === 'urgent' ? "bg-red-500/20 text-red-400" :
+                        task.category === 'admin' ? "bg-yellow-500/20 text-yellow-400" :
+                        task.category === 'creative' ? "bg-blue-500/20 text-blue-400" :
+                        "bg-purple-500/20 text-purple-400"
+                      }`}>
+                        {task.category}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto p-6">
@@ -189,7 +253,7 @@ export default function Home() {
                     : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                 }`}
               >
-                {bucket} ({sprintData[bucket]?.length || 0})
+                {bucket} ({(sprintData[bucket] || []).filter(t => !t.completed).length})
               </button>
             ))}
           </div>
@@ -204,7 +268,7 @@ export default function Home() {
                   <li key={task.id} className="p-4 hover:bg-zinc-800/50 transition-colors">
                     <div className="flex items-start gap-3">
                       <button
-                        onClick={() => handleCompleteTask(task.id)}
+                        onClick={() => handleCompleteTask(task.id, task.completed)}
                         className="mt-1 w-5 h-5 rounded-full border-2 border-zinc-600 hover:border-green-500 transition-colors flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
@@ -237,19 +301,19 @@ export default function Home() {
             <h2 className="text-lg font-semibold mb-4">📊 Today&apos;s Overview</h2>
             <div className="grid grid-cols-4 gap-4">
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-red-400">{sprintData.urgent?.length || 0}</p>
+                <p className="text-3xl font-bold text-red-400">{sprintData.urgent?.filter(t => !t.completed).length || 0}</p>
                 <p className="text-sm text-zinc-500">Urgent</p>
               </div>
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-yellow-400">{sprintData.admin?.length || 0}</p>
+                <p className="text-3xl font-bold text-yellow-400">{sprintData.admin?.filter(t => !t.completed).length || 0}</p>
                 <p className="text-sm text-zinc-500">Admin</p>
               </div>
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-blue-400">{sprintData.creative?.length || 0}</p>
+                <p className="text-3xl font-bold text-blue-400">{sprintData.creative?.filter(t => !t.completed).length || 0}</p>
                 <p className="text-sm text-zinc-500">Creative</p>
               </div>
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-purple-400">{sprintData.deadline?.length || 0}</p>
+                <p className="text-3xl font-bold text-purple-400">{sprintData.deadline?.filter(t => !t.completed).length || 0}</p>
                 <p className="text-sm text-zinc-500">Deadline</p>
               </div>
             </div>
