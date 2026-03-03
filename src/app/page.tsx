@@ -27,6 +27,7 @@ export default function Home() {
   const [energyLevel, setEnergyLevel] = useState<"low" | "medium" | "high">("medium");
   const [focusMode, setFocusMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetchSprintData();
@@ -43,6 +44,18 @@ export default function Home() {
       console.error("Failed to load sprint data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await fetch("/api/sync", { method: "POST" });
+      await fetchSprintData();
+    } catch (error) {
+      console.error("Failed to sync:", error);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -85,16 +98,25 @@ export default function Home() {
       <header className="border-b border-zinc-800 p-6">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <h1 className="text-2xl font-bold">🏃 Sprint Dashboard</h1>
-          <button
-            onClick={() => setFocusMode(!focusMode)}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              focusMode 
-                ? "bg-red-500/20 text-red-400 border border-red-500/50" 
-                : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-            }`}
-          >
-            {focusMode ? "Exit Focus" : "Enter Focus Mode"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="px-4 py-2 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+            >
+              {syncing ? "Syncing..." : "🔄 Sync"}
+            </button>
+            <button
+              onClick={() => setFocusMode(!focusMode)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                focusMode 
+                  ? "bg-red-500/20 text-red-400 border border-red-500/50" 
+                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              }`}
+            >
+              {focusMode ? "Exit Focus" : "Enter Focus Mode"}
+            </button>
+          </div>
         </div>
       </header>
 
