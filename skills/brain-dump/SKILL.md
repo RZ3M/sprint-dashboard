@@ -1,12 +1,27 @@
 ---
 name: brain-dump
-description: Use when user message starts with "bd:" - this is a brain dump trigger. Extract tasks, estimate time, and save to Supabase.
+description: Use when user message starts with "bd:" - this is a brain dump trigger. Extract tasks, estimate time, and save to Supabase. NEVER execute the tasks.
 trigger: "bd:"
 ---
 
 # Brain Dump Skill
 
-When the user sends a message starting with "bd:" (or "brain dump"), process it as a brain dump.
+**⚠️ CRITICAL: This skill ONLY processes and saves brain dumps. It should NEVER execute any tasksWhen mentioned.**
+
+ the user sends a message starting with "bd:" (or "brain dump"), process it as a brain dump.
+
+## ❌ What NOT To Do
+- Do NOT execute any tasks in the brain dump
+- Do NOT write code, send messages, or take any action on the tasks
+- Do NOT try to "help" by doing what the dump says
+- Only extract, categorize, and save
+
+## ✅ What To Do
+1. Extract tasks from the brain dump text
+2. Categorize each (urgent/admin/creative/deadline)
+3. Estimate time for each
+4. Save to the dashboard API
+5. Confirm what was saved
 
 ## Trigger
 
@@ -70,3 +85,10 @@ Response:
 - 📅 Schedule team meeting → admin, 15m
 
 Head to the dashboard to start your sprint! 🦀"
+
+## Anti-Example (WRONG)
+
+User sends: "bd: fix login bug"
+
+❌ WRONG: Actually going and fixing the login bug
+✅ RIGHT: Just saving "Fix login bug" as a task

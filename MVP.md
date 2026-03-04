@@ -17,10 +17,12 @@
 
 ### Phase 2: Task Management
 - [x] **Brain Dump** — Input via "bd:" trigger to add tasks to buckets
+- [x] **Time Estimation** — LLM estimates time for each task
+- [x] **4 Sprints** — Configure view with 4 sprint columns + backlog
+- [x] **Drag & Drop** — Assign tasks to sprints via drag and drop
 - [ ] **Brain Dump v2: Full Capture** — Extract ideas, feelings, notes, goals in addition to tasks
 - [ ] **Master Document View** — Browse brain dumps organized by type/date
 - [ ] **Deadline Detection** — Auto-detect deadlines from emails/calendar → deadline bucket
-- [ ] **Manual Override** — Drag/drop or re-categorize tasks
 
 ### Phase 3: Sprint Execution
 - [ ] **Daily Highlight** — UI to set 1 priority task per day
@@ -54,6 +56,16 @@
 
 ## 📊 Data Models
 
+### Sprint
+```json
+{
+ "id": "uuid",
+ "sprint_number": 1-4,
+ "date": "YYYY-MM-DD",
+ "title": "Sprint 1"
+}
+```
+
 ### Task
 ```json
 {
@@ -65,6 +77,7 @@
  "deadline": "ISO date | null",
  "completed": false,
  "time_estimate_minutes": "number | null",
+ "sprint_id": "uuid | null",
  "created_at": "ISO date"
 }
 ```
@@ -82,25 +95,27 @@
 }
 ```
 
-### Sprint
-```json
-{
- "id": "uuid",
- "category": "urgent | admin | creative | deadline",
- "startTime": "ISO date",
- "duration": 120, // minutes
- "energyLevel": "low | medium | high",
- "tasks": ["taskId"]
-}
-```
-
 ### Daily Log
 ```json
 {
  "date": "YYYY-MM-DD",
- "highlight": "taskId",
- "highlightCompleted": false,
- "sprints": ["sprintId"],
+ "energy_level": "low | medium | high",
+ "highlight_task_id": "uuid | null",
+ "highlight_completed": false,
+ "sprints_completed": 0,
+ "notes": "string"
+}
+```
+
+### Work Log
+```json
+{
+ "id": "uuid",
+ "date": "YYYY-MM-DD",
+ "task_id": "uuid | null",
+ "sprint_category": "urgent | admin | creative | deadline",
+ "duration_minutes": "number",
+ "energy_level": "low | medium | high",
  "notes": "string"
 }
 ```
@@ -109,7 +124,6 @@
 ```json
 {
  "weekStart": "YYYY-MM-DD",
- "sprints": ["sprintId"],
  "totalTimeByCategory": { "urgent": 120, "admin": 60 },
  "insights": "LLM-generated text",
  "recommendations": ["string"]
@@ -122,7 +136,7 @@
 
 ### Brain Dump Flow (v1 - current)
 1. User sends "bd: task1, task2, idea1..."
-2. OpenClaw extracts tasks only
+2. OpenClaw extracts tasks with time estimates
 3. Saves to tasks table
 4. Confirms to user
 
@@ -132,6 +146,17 @@
 3. Saves to brain_dump_entries table
 4. Raw dump saved to brain_dumps table
 5. User can browse in Master Document View
+
+### Configure Sprint Flow (current)
+1. User sees 5 columns: Backlog + Sprint 1-4
+2. Drags tasks from backlog to sprints
+3. Tasks auto-save to database
+
+### Focus Sprint Flow (current)
+1. User selects sprint (1-4) via buttons
+2. Views tasks for that sprint only
+3. Marks tasks complete
+4. Done toggle shows completed tasks
 
 ### Morning Flow
 1. Discord check-in @ 10am → user selects energy level
@@ -158,8 +183,8 @@
 
 ## ✅ MVP Checkbox
 
-| # | Feature | Priority |
-|---|---------|----------|
+| # | Feature | Status |
+|---|---------|--------|
 | 1 | Gmail + Calendar sync | ✅ Done |
 | 2 | Smart triage (noise filter) | ✅ Done |
 | 3 | Dashboard with buckets | ✅ Done |
@@ -167,15 +192,21 @@
 | 5 | Discord cron check-ins | ✅ Done |
 | 6 | Brain dump (bd: trigger) | ✅ Done |
 | 7 | Time estimation (LLM) | ✅ Done |
-| 8 | **Brain Dump v2: Full Capture** (ideas/feelings/notes) | 🔲 |
-| 9 | **Master Document View** | 🔲 |
-| 10 | Deadline category detection | 🔲 |
-| 11 | Daily highlight UI | 🔲 |
-| 12 | Sprint timer | 🔲 |
-| 13 | Work logging (auto) | 🔲 |
-| 14 | 4 PM rule notification | 🔲 |
-| 15 | 9 PM hard stop | 🔲 |
-| 16 | Weekly LLM insights | 🔲 |
+| 8 | 4 Sprints (Configure view) | ✅ Done |
+| 9 | Backlog column | ✅ Done |
+| 10 | Drag & drop task assignment | ✅ Done |
+| 11 | Sprint selector in Focus view | ✅ Done |
+| 12 | Done task toggle per sprint | ✅ Done |
+| 13 | Energy level logging | ✅ Done |
+| 14 | **Brain Dump v2: Full Capture** | 🔲 |
+| 15 | **Master Document View** | 🔲 |
+| 16 | Deadline category detection | 🔲 |
+| 17 | Daily highlight UI | ✅ Done |
+| 18 | Sprint timer | 🔲 |
+| 19 | Work logging (auto) | 🔲 |
+| 20 | 4 PM rule notification | ✅ Done |
+| 21 | 9 PM hard stop | 🔲 |
+| 22 | Weekly LLM insights | 🔲 |
 
 ---
 
