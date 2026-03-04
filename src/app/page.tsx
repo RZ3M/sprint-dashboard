@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Task, Sprint, ViewMode, EnergyLevel } from "../components/types";
+import { Task, Sprint, ViewMode, EnergyLevel, SprintAPIResponse } from "../components/types";
 import { TaskCard } from "../components/TaskCard";
 import { HighlightBanner } from "../components/HighlightBanner";
 import { Column } from "../components/Column";
+import { FocusTaskList } from "../components/FocusTaskList";
 import { getTorontoDateString, formatTime, isPast4PM, getTorontoDate, categoryColors } from "../lib/utils";
 
 export default function Home() {
@@ -76,7 +77,7 @@ export default function Home() {
   const fetchData = async () => {
     try {
       const res = await fetch("/api/sprint");
-      const data = await res.json();
+      const data = await res.json() as SprintAPIResponse;
       if (data.tasks || data.completed || data.sprints) {
         setTasks([...(data.tasks || []), ...(data.completed || [])]);
         setSprints(data.sprints || []);

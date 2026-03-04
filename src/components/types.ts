@@ -21,3 +21,27 @@ export interface Sprint {
 export type ViewMode = 'configure' | 'focus';
 
 export type EnergyLevel = 'low' | 'medium' | 'high';
+
+// API Response types
+export interface SprintAPIResponse {
+  tasks: Task[];
+  completed: Task[];
+  sprints: Sprint[];
+  energyLevel: EnergyLevel;
+  highlightTask: Task | null;
+  highlightCompleted: boolean;
+  stats: {
+    urgent: number;
+    admin: number;
+    creative: number;
+    deadline: number;
+  };
+}
+
+export interface APIError {
+  error: string;
+}
+
+export interface APISuccess {
+  success: boolean;
+}
