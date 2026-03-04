@@ -5,14 +5,7 @@ import { Task, Sprint, ViewMode, EnergyLevel } from "../components/types";
 import { TaskCard } from "../components/TaskCard";
 import { HighlightBanner } from "../components/HighlightBanner";
 import { Column } from "../components/Column";
-import { getTorontoDateString, formatTime, isPast4PM } from "../lib/utils";
-
-const categoryColors = {
-  urgent: "bg-red-500/20 text-red-400",
-  admin: "bg-yellow-500/20 text-yellow-400",
-  creative: "bg-blue-500/20 text-blue-400",
-  deadline: "bg-purple-500/20 text-purple-400"
-};
+import { getTorontoDateString, formatTime, isPast4PM, getTorontoDate, categoryColors } from "../lib/utils";
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -69,7 +62,7 @@ export default function Home() {
   // Update time
   useEffect(() => {
     const updateTime = () => {
-      setCurrentTime(new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Toronto' })));
+      setCurrentTime(getTorontoDate());
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -352,6 +345,7 @@ export default function Home() {
                   title="Backlog"
                   icon="📥"
                   tasks={backlogTasks}
+                  completedTasks={completedTasks.filter(t => !t.sprint_id)}
                   highlightTaskId={highlightTask?.id}
                   onCompleteTask={handleCompleteTask}
                   onToggleHighlight={handleToggleHighlight}
@@ -368,6 +362,7 @@ export default function Home() {
                     title={`Sprint ${sprint.sprint_number}`}
                     icon="🎯"
                     tasks={getSprintTasks(sprint.sprint_number)}
+                    completedTasks={getCompletedTasks(sprint.sprint_number)}
                     highlightTaskId={highlightTask?.id}
                     onCompleteTask={handleCompleteTask}
                     onToggleHighlight={handleToggleHighlight}

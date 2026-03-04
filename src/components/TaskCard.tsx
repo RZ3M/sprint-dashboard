@@ -1,6 +1,7 @@
 "use client";
 
 import { Task } from "./types";
+import { formatTime, categoryColors } from "../lib/utils";
 
 interface TaskCardProps {
   task: Task;
@@ -10,13 +11,6 @@ interface TaskCardProps {
   onDragStart: (taskId: string, e: React.MouseEvent) => void;
   draggable: boolean;
 }
-
-const categoryColors = {
-  urgent: "bg-red-500/20 text-red-400",
-  admin: "bg-yellow-500/20 text-yellow-400",
-  creative: "bg-blue-500/20 text-blue-400",
-  deadline: "bg-purple-500/20 text-purple-400"
-};
 
 export function TaskCard({ task, isHighlight, onComplete, onToggleHighlight, onDragStart, draggable }: TaskCardProps) {
   return (
@@ -62,12 +56,12 @@ export function TaskCard({ task, isHighlight, onComplete, onToggleHighlight, onD
             </span>
             {task.time_estimate_minutes && (
               <span className="text-xs text-zinc-500">
-                ⏱️ {task.time_estimate_minutes}
+                ⏱️ {formatTime(task.time_estimate_minutes)}
               </span>
             )}
             {task.deadline && (
               <span className="text-xs text-purple-400">
-                📅 {formatDate(task.deadline)}
+                📅 {new Date(task.deadline).toLocaleDateString()}
               </span>
             )}
           </div>
@@ -91,8 +85,4 @@ export function TaskCard({ task, isHighlight, onComplete, onToggleHighlight, onD
       </div>
     </div>
   );
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString();
 }

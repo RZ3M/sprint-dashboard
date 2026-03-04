@@ -26,3 +26,11 @@ export const isPast4PM = (testMode: boolean = false): boolean => {
   const now = getTorontoDate();
   return testMode || now.getHours() >= 16;
 };
+
+// Category colors for task badges
+export const categoryColors = {
+  urgent: "bg-red-500/20 text-red-400",
+  admin: "bg-yellow-500/20 text-yellow-400",
+  creative: "bg-blue-500/20 text-blue-400",
+  deadline: "bg-purple-500/20 text-purple-400"
+};

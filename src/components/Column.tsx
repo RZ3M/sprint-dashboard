@@ -1,12 +1,13 @@
 "use client";
 
-import { Task, Sprint } from "./types";
+import { Task } from "./types";
 import { TaskCard } from "./TaskCard";
 
 interface ColumnProps {
   title: string;
   icon: string;
   tasks: Task[];
+  completedTasks?: Task[];
   highlightTaskId?: string;
   onCompleteTask: (taskId: string, completed: boolean) => void;
   onToggleHighlight: (taskId: string) => void;
@@ -22,6 +23,7 @@ export function Column({
   title,
   icon,
   tasks,
+  completedTasks = [],
   highlightTaskId,
   onCompleteTask,
   onToggleHighlight,
@@ -68,6 +70,25 @@ export function Column({
           <p className="text-zinc-500 text-sm text-center py-8">
             {sprintId ? 'Drop tasks here' : 'No tasks in backlog'}
           </p>
+        )}
+        
+        {/* Completed tasks */}
+        {completedTasks.length > 0 && (
+          <>
+            <div className="border-t border-zinc-700/50 my-3"></div>
+            <h3 className="text-xs font-semibold text-zinc-500 mb-2">✓ Completed</h3>
+            {completedTasks.map(task => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                isHighlight={highlightTaskId === task.id}
+                onComplete={onCompleteTask}
+                onToggleHighlight={onToggleHighlight}
+                onDragStart={onDragStart}
+                draggable={draggable}
+              />
+            ))}
+          </>
         )}
       </div>
     </div>

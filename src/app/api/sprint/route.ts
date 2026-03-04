@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { getTorontoDateString } from '../../../lib/server-utils';
 
 export async function GET() {
   try {
     const supabase = createAdminClient();
-    // Use Toronto timezone for date
-    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Toronto' })).toISOString().split('T')[0];
+    const today = getTorontoDateString();
     
     // Get ALL tasks
     const { data: tasks, error } = await supabase
@@ -97,8 +97,7 @@ export async function POST(request: Request) {
     const { action, taskId, sprintId, energyLevel } = body;
     
     const supabase = createAdminClient();
-    // Use Toronto timezone for date
-    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Toronto' })).toISOString().split('T')[0];
+    const today = getTorontoDateString();
 
     if (action === 'completeTask') {
       const { error } = await supabase
