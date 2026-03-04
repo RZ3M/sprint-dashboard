@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const supabase = createAdminClient();
     
-    // Get ALL tasks (both completed and uncompleted)
+    // Get ALL tasks
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*')
@@ -16,15 +16,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
     }
 
-    // Group uncompleted by category
-    const buckets = {
-      urgent: (tasks || []).filter(t => t.category === 'urgent' && !t.completed),
-      admin: (tasks || []).filter(t => t.category === 'admin' && !t.completed),
-      creative: (tasks || []).filter(t => t.category === 'creative' && !t.completed),
-      deadline: (tasks || []).filter(t => t.category === 'deadline' && !t.completed),
-    };
-
-    // Get user state (current sprint, energy level)
+    // Get user state
     const today = new Date().toISOString().split('T')[0];
     const { data: dailyLog } = await supabase
       .from('daily_logs')
@@ -32,12 +24,21 @@ export async function GET() {
       .eq('date', today)
       .single();
 
+    // Return all tasks in one array, grouped for stats
+    const taskList = tasks || [];
+    const completed = taskList.filter(t => t.completed);
+    const active = taskList.filter(t => !t.completed);
+
     return NextResponse.json({
-      ...buckets,
-      currentSprint: dailyLog?.sprints_completed || 'admin',
+      tasks: active,
+      completed: completed,
       energyLevel: dailyLog?.energy_level || 'medium',
-      highlightTaskId: dailyLog?.highlight_task_id || null,
-      highlightCompleted: dailyLog?.highlight_completed || false,
+      stats: {
+        urgent: active.filter(t => t.category === 'urgent').length,
+        admin: active.filter(t => t.category === 'admin').length,
+        creative: active.filter(t => t.category === 'creative').length,
+        deadline: active.filter(t => t.category === 'deadline').length,
+      }
     });
 
   } catch (error) {
@@ -49,53 +50,28 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { currentSprint, energyLevel, action } = body;
+    const { action, taskId, energyLevel } = body;
     
     const supabase = createAdminClient();
     const today = new Date().toISOString().split('T')[0];
 
-    if (action === 'setHighlight') {
-      const { taskId } = body;
-      const { error } = await supabase
-        .from('daily_logs')
-        .upsert({
-          date: today,
-          highlight_task_id: taskId,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (error) {
-        console.error('Failed to set highlight:', error);
-        return NextResponse.json({ error: 'Failed to set highlight' }, { status: 500 });
-      }
-      return NextResponse.json({ success: true });
-    }
-
     if (action === 'completeTask') {
-      const { taskId } = body;
       const { error } = await supabase
         .from('tasks')
         .update({ completed: true, updated_at: new Date().toISOString() })
         .eq('id', taskId);
 
-      if (error) {
-        console.error('Failed to complete task:', error);
-        return NextResponse.json({ error: 'Failed to complete task' }, { status: 500 });
-      }
+      if (error) return NextResponse.json({ error: 'Failed to complete task' }, { status: 500 });
       return NextResponse.json({ success: true });
     }
 
     if (action === 'uncompleteTask') {
-      const { taskId } = body;
       const { error } = await supabase
         .from('tasks')
         .update({ completed: false, updated_at: new Date().toISOString() })
         .eq('id', taskId);
 
-      if (error) {
-        console.error('Failed to uncomplete task:', error);
-        return NextResponse.json({ error: 'Failed to uncomplete task' }, { status: 500 });
-      }
+      if (error) return NextResponse.json({ error: 'Failed to uncomplete task' }, { status: 500 });
       return NextResponse.json({ success: true });
     }
 
@@ -108,10 +84,7 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         });
 
-      if (error) {
-        console.error('Failed to update energy:', error);
-        return NextResponse.json({ error: 'Failed to update energy' }, { status: 500 });
-      }
+      if (error) return NextResponse.json({ error: 'Failed to update energy' }, { status: 500 });
       return NextResponse.json({ success: true });
     }
 

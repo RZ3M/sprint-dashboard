@@ -39,6 +39,7 @@ export async function POST(request: Request) {
       source: 'brain_dump',
       deadline: task.deadline || null,
       completed: false,
+      time_estimate_minutes: task.time_estimate_minutes || null,
     }));
 
     const { error: tasksError } = await supabase

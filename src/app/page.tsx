@@ -2,35 +2,20 @@
 
 import { useState, useEffect } from "react";
 
-type SprintBucket = "urgent" | "admin" | "creative" | "deadline";
-
 interface Task {
   id: string;
   title: string;
   description: string;
-  category: SprintBucket;
+  category: 'urgent' | 'admin' | 'creative' | 'deadline';
   source: string;
   deadline: string | null;
   completed: boolean;
   created_at: string;
-}
-
-interface SprintData {
-  urgent: Task[];
-  admin: Task[];
-  creative: Task[];
-  deadline: Task[];
-  currentSprint?: SprintBucket;
-  energyLevel?: "low" | "medium" | "high";
-  highlightTaskId?: string | null;
-  highlightCompleted?: boolean;
+  time_estimate_minutes: number | null;
 }
 
 export default function Home() {
-  const [sprintData, setSprintData] = useState<SprintData>({ 
-    urgent: [], admin: [], creative: [], deadline: [] 
-  });
-  const [currentSprint, setCurrentSprint] = useState<SprintBucket>("admin");
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [energyLevel, setEnergyLevel] = useState<"low" | "medium" | "high">("medium");
   const [focusMode, setFocusMode] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -38,20 +23,24 @@ export default function Home() {
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
-    fetchSprintData();
+    fetchData();
   }, []);
 
-  const fetchSprintData = async () => {
+  const fetchData = async () => {
     try {
       const res = await fetch("/api/sprint");
       const data = await res.json();
-      if (data.urgent || data.admin || data.creative || data.deadline) {
-        setSprintData(data);
-        if (data.currentSprint) setCurrentSprint(data.currentSprint);
+      if (data.tasks || data.completed) {
+        // Combine all buckets into one list
+        const allTasks = [
+          ...(data.tasks || []),
+          ...(data.completed || [])
+        ];
+        setTasks(allTasks);
         if (data.energyLevel) setEnergyLevel(data.energyLevel);
       }
     } catch (error) {
-      console.error("Failed to load sprint data:", error);
+      console.error("Failed to load data:", error);
     } finally {
       setLoading(false);
     }
@@ -61,7 +50,7 @@ export default function Home() {
     setSyncing(true);
     try {
       await fetch("/api/sync", { method: "POST" });
-      await fetchSprintData();
+      await fetchData();
     } catch (error) {
       console.error("Failed to sync:", error);
     } finally {
@@ -71,26 +60,14 @@ export default function Home() {
 
   const handleEnergySelect = async (level: "low" | "medium" | "high") => {
     setEnergyLevel(level);
-    
-    if (level === "high") {
-      setCurrentSprint("creative");
-    } else if (level === "low") {
-      setCurrentSprint("admin");
-    }
-    
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        action: "updateEnergy",
-        energyLevel: level,
-        currentSprint: level === "high" ? "creative" : level === "low" ? "admin" : "creative"
-      }),
+      body: JSON.stringify({ action: "updateEnergy", energyLevel: level }),
     });
   };
 
   const handleCompleteTask = async (taskId: string, currentlyCompleted: boolean) => {
-    // Toggle completion status
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -99,28 +76,27 @@ export default function Home() {
         taskId 
       }),
     });
-    fetchSprintData();
+    fetchData();
   };
 
-  // Get completed tasks count
-  const getCompletedCount = () => {
-    const allTasks = [...sprintData.urgent, ...sprintData.admin, ...sprintData.creative, ...sprintData.deadline];
-    return allTasks.filter(t => t.completed).length;
+  const activeTasks = tasks.filter(t => !t.completed);
+  const completedTasks = tasks.filter(t => t.completed);
+  const completedCount = completedTasks.length;
+
+  const categoryColors = {
+    urgent: "bg-red-500/20 text-red-400",
+    admin: "bg-yellow-500/20 text-yellow-400", 
+    creative: "bg-blue-500/20 text-blue-400",
+    deadline: "bg-purple-500/20 text-purple-400"
   };
 
-  // Get completed tasks
-  const getCompletedTasks = () => {
-    const allTasks = [...sprintData.urgent, ...sprintData.admin, ...sprintData.creative, ...sprintData.deadline];
-    return allTasks.filter(t => t.completed);
-  };
-
-  const currentTasks = (sprintData[currentSprint] || []).filter(t => !t.completed);
-
-  const bucketColors = {
-    urgent: "bg-red-500",
-    admin: "bg-yellow-500", 
-    creative: "bg-blue-500",
-    deadline: "bg-purple-500"
+  const formatTime = (minutes: number | null): string => {
+    if (!minutes) return '';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours === 0) return `${mins}m`;
+    if (mins === 0) return `${hours}h`;
+    return `${hours}h${mins}m`;
   };
 
   if (loading) {
@@ -131,8 +107,6 @@ export default function Home() {
     );
   }
 
-  const completedCount = getCompletedCount();
-
   return (
     <div className={`min-h-screen bg-zinc-900 text-zinc-100 ${focusMode ? 'overflow-hidden' : ''}`}>
       {/* Header */}
@@ -140,14 +114,6 @@ export default function Home() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <h1 className="text-2xl font-bold">🏃 Sprint Dashboard</h1>
           <div className="flex gap-2">
-            {completedCount > 0 && (
-              <button
-                onClick={() => setShowCompleted(!showCompleted)}
-                className="px-4 py-2 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-              >
-                {showCompleted ? "✓ Done" : `Done (${completedCount})`}
-              </button>
-            )}
             <button
               onClick={handleSync}
               disabled={syncing}
@@ -168,45 +134,6 @@ export default function Home() {
           </div>
         </div>
       </header>
-
-      {/* Completed Tasks Section */}
-      {showCompleted && completedCount > 0 && !focusMode && (
-        <section className="border-b border-zinc-800 bg-zinc-900/50">
-          <div className="max-w-4xl mx-auto p-6">
-            <h2 className="text-lg font-semibold mb-4 text-zinc-400">✓ Completed</h2>
-            <div className="bg-zinc-800/30 rounded-lg border border-zinc-700/30">
-              <ul className="divide-y divide-zinc-700/30">
-                {getCompletedTasks().map((task) => (
-                  <li key={task.id} className="p-4 hover:bg-zinc-800/30 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <button
-                        onClick={() => handleCompleteTask(task.id, task.completed)}
-                        className="mt-1 w-5 h-5 rounded-full border-2 border-green-500 bg-green-500 flex-shrink-0 flex items-center justify-center"
-                      >
-                        <span className="text-black text-xs">✓</span>
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium line-through text-zinc-500">{task.title}</p>
-                        {task.description && (
-                          <p className="text-sm text-zinc-600 line-through">{task.description}</p>
-                        )}
-                      </div>
-                      <span className={`px-2 py-0.5 text-xs rounded ${
-                        task.category === 'urgent' ? "bg-red-500/20 text-red-400" :
-                        task.category === 'admin' ? "bg-yellow-500/20 text-yellow-400" :
-                        task.category === 'creative' ? "bg-blue-500/20 text-blue-400" :
-                        "bg-purple-500/20 text-purple-400"
-                      }`}>
-                        {task.category}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto p-6">
@@ -236,35 +163,28 @@ export default function Home() {
           </section>
         )}
 
-        {/* Sprint Buckets */}
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">🎯 Current Sprint</h2>
-          
-          {/* Bucket Tabs */}
-          <div className="flex gap-2 mb-4">
-            {(["urgent", "admin", "creative", "deadline"] as const).map((bucket) => (
+        {/* Current Sprint */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">🎯 Current Sprint</h2>
+            {completedCount > 0 && (
               <button
-                key={bucket}
-                onClick={() => !focusMode && setCurrentSprint(bucket)}
-                disabled={focusMode}
-                className={`px-4 py-2 rounded-lg font-medium capitalize transition-all ${
-                  currentSprint === bucket
-                    ? `${bucketColors[bucket]} text-white`
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                }`}
+                onClick={() => setShowCompleted(!showCompleted)}
+                className="px-4 py-2 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
               >
-                {bucket} ({(sprintData[bucket] || []).filter(t => !t.completed).length})
+                {showCompleted ? "✓ Done" : `Done (${completedCount})`}
               </button>
-            ))}
+            )}
           </div>
 
           {/* Task List */}
           <div className="bg-zinc-800/50 rounded-lg border border-zinc-700/50">
-            {currentTasks.length === 0 ? (
-              <p className="p-6 text-zinc-500 text-center">No tasks in this sprint</p>
+            {activeTasks.length === 0 && completedTasks.length === 0 ? (
+              <p className="p-6 text-zinc-500 text-center">No tasks yet</p>
             ) : (
               <ul className="divide-y divide-zinc-700/50">
-                {currentTasks.map((task) => (
+                {/* Active Tasks */}
+                {activeTasks.map((task) => (
                   <li key={task.id} className="p-4 hover:bg-zinc-800/50 transition-colors">
                     <div className="flex items-start gap-3">
                       <button
@@ -282,10 +202,39 @@ export default function Home() {
                           </p>
                         )}
                       </div>
-                      <span className={`px-2 py-0.5 text-xs rounded ${
-                        task.source === 'brain_dump' ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-400"
-                      }`}>
-                        {task.source}
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`px-2 py-0.5 text-xs rounded ${categoryColors[task.category]}`}>
+                          {task.category}
+                        </span>
+                        {task.time_estimate_minutes && (
+                          <span className="text-xs text-zinc-500">
+                            ⏱️ {formatTime(task.time_estimate_minutes)}
+                          </span>
+                        )}
+                        <span className="text-xs text-zinc-500">{task.source}</span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+
+                {/* Completed Tasks (shown when toggle is on) */}
+                {showCompleted && completedTasks.map((task) => (
+                  <li key={task.id} className="p-4 hover:bg-zinc-800/30 transition-colors bg-zinc-800/20">
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => handleCompleteTask(task.id, task.completed)}
+                        className="mt-1 w-5 h-5 rounded-full border-2 border-green-500 bg-green-500 flex-shrink-0 flex items-center justify-center"
+                      >
+                        <span className="text-black text-xs">✓</span>
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium line-through text-zinc-500">{task.title}</p>
+                        {task.description && (
+                          <p className="text-sm text-zinc-600 line-through">{task.description}</p>
+                        )}
+                      </div>
+                      <span className={`px-2 py-0.5 text-xs rounded ${categoryColors[task.category]} opacity-60`}>
+                        {task.category}
                       </span>
                     </div>
                   </li>
@@ -297,23 +246,23 @@ export default function Home() {
 
         {/* Quick Stats */}
         {!focusMode && (
-          <section>
+          <section className="mt-8">
             <h2 className="text-lg font-semibold mb-4">📊 Today&apos;s Overview</h2>
             <div className="grid grid-cols-4 gap-4">
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-red-400">{sprintData.urgent?.filter(t => !t.completed).length || 0}</p>
+                <p className="text-3xl font-bold text-red-400">{tasks.filter(t => t.category === 'urgent' && !t.completed).length}</p>
                 <p className="text-sm text-zinc-500">Urgent</p>
               </div>
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-yellow-400">{sprintData.admin?.filter(t => !t.completed).length || 0}</p>
+                <p className="text-3xl font-bold text-yellow-400">{tasks.filter(t => t.category === 'admin' && !t.completed).length}</p>
                 <p className="text-sm text-zinc-500">Admin</p>
               </div>
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-blue-400">{sprintData.creative?.filter(t => !t.completed).length || 0}</p>
+                <p className="text-3xl font-bold text-blue-400">{tasks.filter(t => t.category === 'creative' && !t.completed).length}</p>
                 <p className="text-sm text-zinc-500">Creative</p>
               </div>
               <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
-                <p className="text-3xl font-bold text-purple-400">{sprintData.deadline?.filter(t => !t.completed).length || 0}</p>
+                <p className="text-3xl font-bold text-purple-400">{tasks.filter(t => t.category === 'deadline' && !t.completed).length}</p>
                 <p className="text-sm text-zinc-500">Deadline</p>
               </div>
             </div>
@@ -326,9 +275,7 @@ export default function Home() {
         <div className="fixed inset-0 bg-zinc-900 z-50 flex flex-col">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${bucketColors[currentSprint]} text-white`}>
-                {currentSprint}
-              </span>
+              <span className="text-zinc-400 font-medium">🎯 Current Sprint</span>
               <span className="text-zinc-500">
                 {energyLevel === "high" ? "⚡ High energy" : energyLevel === "medium" ? "⚡ Medium energy" : "⚡ Low energy"}
               </span>
@@ -342,11 +289,19 @@ export default function Home() {
           </div>
           <div className="flex-1 overflow-auto p-6">
             <ul className="max-w-2xl mx-auto space-y-2">
-              {currentTasks.map((task) => (
+              {activeTasks.map((task) => (
                 <li key={task.id} className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
                   <div className="flex items-center gap-3">
                     <span className="text-zinc-600">○</span>
                     <span className="text-lg">{task.title}</span>
+                    {task.time_estimate_minutes && (
+                      <span className="text-sm text-zinc-500">
+                        ⏱️ {formatTime(task.time_estimate_minutes)}
+                      </span>
+                    )}
+                    <span className={`ml-auto px-2 py-0.5 text-xs rounded ${categoryColors[task.category]}`}>
+                      {task.category}
+                    </span>
                   </div>
                 </li>
               ))}
