@@ -114,6 +114,12 @@ export default function Home() {
   };
 
   const handleCompleteTask = async (taskId: string, currentlyCompleted: boolean) => {
+    // Optimistic update
+    setTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, completed: !currentlyCompleted } : t
+    ));
+    
+    // Sync with server
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -196,7 +202,24 @@ export default function Home() {
   };
 
   const handleToggleHighlight = async (taskId: string) => {
-    if (highlightTask?.id === taskId) {
+    // Optimistic update - immediately toggle locally
+    const isCurrentlyHighlighted = highlightTask?.id === taskId;
+    
+    if (isCurrentlyHighlighted) {
+      // Clear highlight locally
+      setHighlightTask(null);
+      setHighlightCompleted(false);
+    } else {
+      // Set new highlight locally - find the task
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        setHighlightTask(task);
+        setHighlightCompleted(task.completed);
+      }
+    }
+    
+    // Sync with server in background
+    if (isCurrentlyHighlighted) {
       await fetch("/api/sprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -209,10 +232,13 @@ export default function Home() {
         body: JSON.stringify({ action: "setHighlight", taskId }),
       });
     }
-    fetchData();
   };
 
   const handleCompleteHighlight = async () => {
+    // Optimistic update
+    setHighlightCompleted(!highlightCompleted);
+    
+    // Sync with server
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -222,16 +248,19 @@ export default function Home() {
   };
 
   const handleClearHighlight = async () => {
+    // Optimistic update
+    setHighlightTask(null);
+    setHighlightCompleted(false);
+    
+    // Sync with server
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "clearHighlight" }),
     });
-    setHighlightTask(null);
-    setHighlightCompleted(false);
-    fetchData();
   };
 
+  // Remove duplicate handleCompleteTask definition
   const currentIsPast4PM = test4PM || isPast4PM();
 
   if (loading) {
