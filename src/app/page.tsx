@@ -1,38 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { Task, Sprint, ViewMode, EnergyLevel } from "../components/types";
+import { TaskCard } from "../components/TaskCard";
+import { HighlightBanner } from "../components/HighlightBanner";
+import { Column } from "../components/Column";
+import { getTorontoDateString, formatTime, isPast4PM } from "../lib/utils";
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  category: 'urgent' | 'admin' | 'creative' | 'deadline';
-  source: string;
-  deadline: string | null;
-  completed: boolean;
-  created_at: string;
-  time_estimate_minutes: number | null;
-  sprint_id: string | null;
-}
-
-interface Sprint {
-  id: string;
-  sprint_number: number;
-  date: string;
-  title: string;
-}
-
-type ViewMode = 'configure' | 'focus';
-
-interface DailyLog {
-  highlight_task_id: string | null;
-  highlight_completed: boolean;
-}
+const categoryColors = {
+  urgent: "bg-red-500/20 text-red-400",
+  admin: "bg-yellow-500/20 text-yellow-400",
+  creative: "bg-blue-500/20 text-blue-400",
+  deadline: "bg-purple-500/20 text-purple-400"
+};
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
-  const [energyLevel, setEnergyLevel] = useState<"low" | "medium" | "high">("medium");
+  const [energyLevel, setEnergyLevel] = useState<EnergyLevel>("medium");
   const [focusMode, setFocusMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -40,27 +25,56 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>('focus');
   const [currentSprint, setCurrentSprint] = useState<number>(1);
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [highlightTask, setHighlightTask] = useState<Task | null>(null);
   const [highlightCompleted, setHighlightCompleted] = useState(false);
-  const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  
-  // 4pm Rule check
+  const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [test4PM, setTest4PM] = useState(false);
   const [show4PMWarning, setShow4PMWarning] = useState(false);
+
+  // Derived state
+  const activeTasks = tasks.filter(t => !t.completed);
+  const completedTasks = tasks.filter(t => t.completed);
+  const backlogTasks = activeTasks.filter(t => !t.sprint_id);
+  const currentSprintData = sprints.find(s => s.sprint_number === currentSprint);
+  const currentSprintTasks = activeTasks.filter(t => t.sprint_id === currentSprintData?.id);
+  const currentSprintCompleted = tasks.filter(t => t.completed && t.sprint_id === currentSprintData?.id);
+  const completedCount = currentSprintCompleted.length;
+
+  const getSprintTasks = (sprintNumber: number) => {
+    const sprint = sprints.find(s => s.sprint_number === sprintNumber);
+    return activeTasks.filter(t => t.sprint_id === sprint?.id);
+  };
+
+  const getCompletedTasks = (sprintNumber: number) => {
+    const sprint = sprints.find(s => s.sprint_number === sprintNumber);
+    return tasks.filter(t => t.completed && t.sprint_id === sprint?.id);
+  };
+
+  // 4pm Rule check
   useEffect(() => {
     const check4PMRule = () => {
-      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Toronto' }));
-      const hour = now.getHours();
-      // Show warning if it's 4pm or later, highlight is set, but not completed
-      if (hour >= 16 && highlightTask && !highlightCompleted) {
+      if ((test4PM || isPast4PM()) && highlightTask && !highlightCompleted) {
         setShow4PMWarning(true);
+        setTimeout(() => setShow4PMWarning(false), 5000);
       }
     };
     check4PMRule();
-    // Check every minute
     const interval = setInterval(check4PMRule, 60000);
     return () => clearInterval(interval);
-  }, [highlightTask, highlightCompleted]);
+  }, [highlightTask, highlightCompleted, test4PM]);
+
+  // Update time
+  useEffect(() => {
+    const updateTime = () => {
+      setCurrentTime(new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Toronto' })));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -71,11 +85,7 @@ export default function Home() {
       const res = await fetch("/api/sprint");
       const data = await res.json();
       if (data.tasks || data.completed || data.sprints) {
-        const allTasks = [
-          ...(data.tasks || []),
-          ...(data.completed || [])
-        ];
-        setTasks(allTasks);
+        setTasks([...(data.tasks || []), ...(data.completed || [])]);
         setSprints(data.sprints || []);
         if (data.energyLevel) setEnergyLevel(data.energyLevel);
         if (data.highlightTask) setHighlightTask(data.highlightTask);
@@ -100,7 +110,7 @@ export default function Home() {
     }
   };
 
-  const handleEnergySelect = async (level: "low" | "medium" | "high") => {
+  const handleEnergySelect = async (level: EnergyLevel) => {
     setEnergyLevel(level);
     await fetch("/api/sprint", {
       method: "POST",
@@ -113,21 +123,98 @@ export default function Home() {
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        action: currentlyCompleted ? "uncompleteTask" : "completeTask", 
-        taskId 
+      body: JSON.stringify({
+        action: currentlyCompleted ? "uncompleteTask" : "completeTask",
+        taskId
       }),
     });
     fetchData();
   };
 
+  // Drag handlers
+  const handleTaskMouseDown = (taskId: string, e: React.MouseEvent) => {
+    if (viewMode !== 'configure' || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggedTask(taskId);
+    setMouseDownPos({ x: e.clientX, y: e.clientY });
+    setDragPosition({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!draggedTask) return;
+    if (mouseDownPos) {
+      const dx = Math.abs(e.clientX - mouseDownPos.x);
+      const dy = Math.abs(e.clientY - mouseDownPos.y);
+      if (dx > 3 || dy > 3) {
+        setDragPosition({ x: e.clientX, y: e.clientY });
+      }
+    } else {
+      setDragPosition({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  const handleMouseUp = async (targetSprintId: string | null) => {
+    if (!draggedTask) return;
+    const task = tasks.find(t => t.id === draggedTask);
+    const currentSprintId = task?.sprint_id;
+    const targetId = targetSprintId;
+
+    if (currentSprintId !== targetId) {
+      setTasks(prev => prev.map(t =>
+        t.id === draggedTask ? { ...t, sprint_id: targetId } : t
+      ));
+      await fetch("/api/sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "assignTask", taskId: draggedTask, sprintId: targetId }),
+      });
+    }
+    setDraggedTask(null);
+    setDragPosition(null);
+    setMouseDownPos(null);
+    setDragOverColumn(null);
+  };
+
+  const handleGlobalMouseUp = () => {
+    if (draggedTask) {
+      setDraggedTask(null);
+      setDragPosition(null);
+      setMouseDownPos(null);
+      setDragOverColumn(null);
+    }
+  };
+
+  const handleColumnMouseEnter = (columnId: string | null) => {
+    if (draggedTask) {
+      setDragOverColumn(columnId === null ? 'backlog' : columnId);
+    }
+  };
+
+  // Highlight handlers
   const handleSetHighlight = async (taskId: string) => {
     await fetch("/api/sprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "setHighlight", taskId }),
     });
-    setShowHighlightPicker(false);
+    fetchData();
+  };
+
+  const handleToggleHighlight = async (taskId: string) => {
+    if (highlightTask?.id === taskId) {
+      await fetch("/api/sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clearHighlight" }),
+      });
+    } else {
+      await fetch("/api/sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setHighlight", taskId }),
+      });
+    }
     fetchData();
   };
 
@@ -146,151 +233,12 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "clearHighlight" }),
     });
-    // Clear locally for instant feedback
     setHighlightTask(null);
     setHighlightCompleted(false);
     fetchData();
   };
 
-  const handleDragStart = (taskId: string, e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', taskId);
-    setDraggedTask(taskId);
-    // Force opacity change immediately
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`task-${taskId}`);
-      if (el) el.style.opacity = '0.4';
-    });
-  };
-
-  const handleDragOver = (e: React.DragEvent, columnId: string | null) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverColumn(columnId);
-    return false;
-  };
-
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
-
-  const handleDrop = async (sprintId: string | null) => {
-    if (!draggedTask) return;
-    
-    await fetch("/api/sprint", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        action: "assignTask", 
-        taskId: draggedTask,
-        sprintId: sprintId
-      }),
-    });
-    
-    setDraggedTask(null);
-    setDragOverColumn(null);
-    fetchData();
-  };
-
-  const activeTasks = tasks.filter(t => !t.completed);
-  const completedTasks = tasks.filter(t => t.completed);
-
-  // Group tasks by sprint
-  const backlogTasks = activeTasks.filter(t => !t.sprint_id);
-  const getSprintTasks = (sprintNumber: number) => {
-    const sprint = sprints.find(s => s.sprint_number === sprintNumber);
-    return activeTasks.filter(t => t.sprint_id === sprint?.id);
-  };
-  const getCompletedTasks = (sprintNumber: number) => {
-    const sprint = sprints.find(s => s.sprint_number === sprintNumber);
-    return tasks.filter(t => t.completed && t.sprint_id === sprint?.id);
-  };
-  const currentSprintData = sprints.find(s => s.sprint_number === currentSprint);
-  const currentSprintTasks = activeTasks.filter(t => t.sprint_id === currentSprintData?.id);
-  const currentSprintCompleted = tasks.filter(t => t.completed && t.sprint_id === currentSprintData?.id);
-  const completedCount = currentSprintCompleted.length;
-
-  const categoryColors = {
-    urgent: "bg-red-500/20 text-red-400",
-    admin: "bg-yellow-500/20 text-yellow-400", 
-    creative: "bg-blue-500/20 text-blue-400",
-    deadline: "bg-purple-500/20 text-purple-400"
-  };
-
-  const formatTime = (minutes: number | null): string => {
-    if (!minutes) return '';
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h${mins}m`;
-  };
-
-  const TaskCard = ({ task, isHighlight = false }: { task: Task; isHighlight?: boolean }) => {
-    const isDragging = draggedTask === task.id;
-    
-    return (
-      <div 
-        id={`task-${task.id}`}
-        draggable={viewMode === 'configure'}
-        onDragStart={(e) => handleDragStart(task.id, e)}
-        onDragEnd={() => {
-          setDraggedTask(null);
-          setDragOverColumn(null);
-        }}
-        className={`p-3 bg-zinc-800/50 rounded-lg border transition-all select-none ${
-          isDragging 
-            ? 'opacity-40 border-green-500' 
-            : isHighlight
-              ? 'border-green-500/50 bg-green-500/10'
-              : 'border-zinc-700/50 hover:bg-zinc-800'
-        } ${viewMode === 'configure' ? 'cursor-grab active:cursor-grabbing' : ''}`}
-      >
-        <div className="flex items-start gap-2">
-          <button
-            onClick={() => handleCompleteTask(task.id, task.completed)}
-            className={`mt-1 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-              task.completed 
-                ? "border-green-500 bg-green-500" 
-                : "border-zinc-600 hover:border-green-500"
-            }`}
-          >
-            {task.completed && <span className="text-black text-xs">✓</span>}
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className={`font-medium text-sm flex-1 ${task.completed ? 'line-through text-zinc-500' : ''}`}>
-                {task.title}
-              </p>
-              {isHighlight && (
-                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded flex-shrink-0">
-                  ⭐ Highlight
-                </span>
-              )}
-            </div>
-            {task.description && (
-              <p className="text-xs text-zinc-500 mt-1">{task.description}</p>
-            )}
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <span className={`px-2 py-0.5 text-xs rounded ${categoryColors[task.category]}`}>
-                {task.category}
-              </span>
-              {task.time_estimate_minutes && (
-                <span className="text-xs text-zinc-500">
-                  ⏱️ {formatTime(task.time_estimate_minutes)}
-                </span>
-              )}
-              {task.deadline && (
-                <span className="text-xs text-purple-400">
-                  📅 {new Date(task.deadline).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const currentIsPast4PM = test4PM || isPast4PM();
 
   if (loading) {
     return (
@@ -301,21 +249,21 @@ export default function Home() {
   }
 
   return (
-    <div className={`min-h-screen bg-zinc-900 text-zinc-100 ${focusMode ? 'overflow-hidden' : ''}`}>
+    <div
+      className={`min-h-screen bg-zinc-900 text-zinc-100 ${focusMode ? 'overflow-hidden' : ''}`}
+      onMouseUp={handleGlobalMouseUp}
+      onMouseMove={handleMouseMove}
+    >
       {/* Header */}
       <header className="border-b border-zinc-800 p-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-bold">🏃 Sprint Dashboard</h1>
-            
-            {/* View Toggle */}
             <div className="flex bg-zinc-800 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('focus')}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'focus' 
-                    ? 'bg-zinc-700 text-white' 
-                    : 'text-zinc-400 hover:text-white'
+                  viewMode === 'focus' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
                 }`}
               >
                 Focus
@@ -323,9 +271,7 @@ export default function Home() {
               <button
                 onClick={() => setViewMode('configure')}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'configure' 
-                    ? 'bg-zinc-700 text-white' 
-                    : 'text-zinc-400 hover:text-white'
+                  viewMode === 'configure' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
                 }`}
               >
                 Configure
@@ -333,7 +279,21 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <div className="px-3 py-1.5 bg-zinc-800 rounded-lg text-sm font-mono">
+              <span className="text-zinc-400">
+                {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+              </span>
+              <span className="text-zinc-600 ml-1 text-xs">ET</span>
+            </div>
+            <button
+              onClick={() => setTest4PM(!test4PM)}
+              className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                test4PM ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              🧪 4PM
+            </button>
             <button
               onClick={handleSync}
               disabled={syncing}
@@ -345,9 +305,7 @@ export default function Home() {
               <button
                 onClick={() => setFocusMode(!focusMode)}
                 className={`px-3 py-1.5 rounded-lg font-medium transition-colors text-sm ${
-                  focusMode 
-                    ? "bg-red-500/20 text-red-400 border border-red-500/50" 
-                    : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                  focusMode ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                 }`}
               >
                 {focusMode ? "Exit Focus" : "Enter Focus"}
@@ -360,160 +318,69 @@ export default function Home() {
       {/* Main Content */}
       <main className="p-3">
         <div className="h-full">
-          
-          {/* 4PM Rule Warning */}
+          {/* 4PM Toast */}
           {show4PMWarning && !focusMode && (
-            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/50 rounded-lg flex items-center gap-3">
-              <span className="text-2xl">⚠️</span>
-              <div className="flex-1">
-                <p className="font-medium text-red-400">4 PM Rule triggered!</p>
-                <p className="text-sm text-zinc-400">
-                  Your highlight hasn't been started yet. Time to focus!
-                </p>
+            <div className="fixed top-4 right-4 z-50 animate-slide-in">
+              <div className="p-4 bg-red-500/90 text-white rounded-lg shadow-lg flex items-center gap-3">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <p className="font-medium">4 PM Rule!</p>
+                  <p className="text-sm text-red-100">Time to focus on your highlight!</p>
+                </div>
               </div>
-              <button
-                onClick={() => setShow4PMWarning(false)}
-                className="text-zinc-500 hover:text-zinc-300"
-              >
-                ✕
-              </button>
             </div>
           )}
 
           {/* CONFIGURE VIEW */}
-          {/* Daily Highlight Banner for Configure */}
-          {viewMode === 'configure' && highlightTask && !focusMode && (
-            <div className="mb-4 p-4 bg-green-500/10 border border-green-500/50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleCompleteHighlight}
-                  className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                    highlightCompleted 
-                      ? "border-green-500 bg-green-500" 
-                      : "border-zinc-600 hover:border-green-500"
-                  }`}
-                >
-                  {highlightCompleted && <span className="text-black text-xs">✓</span>}
-                </button>
-                <div className="flex-1">
-                  <p className="text-xs text-green-400 font-medium">⭐ TODAY'S HIGHLIGHT</p>
-                  <p className={`font-medium ${highlightCompleted ? 'line-through text-zinc-500' : ''}`}>
-                    {highlightTask.title}
-                  </p>
-                  {highlightTask.time_estimate_minutes && (
-                    <p className="text-sm text-zinc-500">
-                      ⏱️ {formatTime(highlightTask.time_estimate_minutes)}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={handleClearHighlight}
-                  className="text-zinc-500 hover:text-zinc-300 p-1"
-                  title="Clear highlight"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          )}
-
-          {viewMode === 'configure' && (
-            <div className="flex gap-3 h-[calc(100vh-140px)]">
-              {/* Backlog Column */}
-              <div 
-                className={`flex-1 min-w-0 bg-zinc-800/30 rounded-lg p-3 border flex flex-col transition-colors ${
-                  dragOverColumn === 'backlog' ? 'border-green-500 bg-green-500/5' : 'border-zinc-700/50'
-                }`}
-                onDragOver={(e) => handleDragOver(e, 'backlog')}
-                onDragLeave={handleDragLeave}
-                onDrop={() => handleDrop(null)}
-              >
-                <h2 className="font-semibold text-zinc-400 mb-3 flex items-center gap-2 flex-shrink-0">
-                  📥 Backlog
-                  <span className="text-xs bg-zinc-700 px-2 py-0.5 rounded-full">
-                    {backlogTasks.length}
-                  </span>
-                </h2>
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                  {backlogTasks.map(task => (
-                    <TaskCard 
-                      key={task.id} 
-                      task={task} 
-                      isHighlight={highlightTask?.id === task.id}
-                    />
-                  ))}
-                  {backlogTasks.length === 0 && (
-                    <p className="text-zinc-500 text-sm text-center py-8">
-                      No tasks in backlog
-                    </p>
-                  )}
-                  
-                  {/* Completed tasks at bottom of backlog */}
-                  {completedTasks.filter(t => !t.sprint_id).length > 0 && (
-                    <>
-                      <div className="border-t border-zinc-700/50 my-3"></div>
-                      <h3 className="text-xs font-semibold text-zinc-500 mb-2">✓ Completed</h3>
-                      {completedTasks.filter(t => !t.sprint_id).map(task => (
-                        <TaskCard 
-                          key={task.id} 
-                          task={task}
-                          isHighlight={highlightTask?.id === task.id}
-                        />
-                      ))}
-                    </>
-                  )}
-                </div>
+          {viewMode === 'configure' && !focusMode && (
+            <>
+              {/* Daily Highlight Banner */}
+              <div className="mb-4">
+                <h2 className="text-base font-semibold mb-3">🎯 Today&apos;s Highlight</h2>
+                <HighlightBanner
+                  highlightTask={highlightTask}
+                  highlightCompleted={highlightCompleted}
+                  isPast4PM={currentIsPast4PM}
+                  onComplete={handleCompleteHighlight}
+                  onClear={handleClearHighlight}
+                />
               </div>
 
-              {/* Sprint Columns */}
-              {sprints.map(sprint => (
-                <div 
-                  key={sprint.id}
-                  className={`flex-1 min-w-0 bg-zinc-800/30 rounded-lg p-3 border flex flex-col transition-colors ${
-                    dragOverColumn === sprint.id ? 'border-green-500 bg-green-500/5' : 'border-zinc-700/50'
-                  }`}
-                  onDragOver={(e) => handleDragOver(e, sprint.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={() => handleDrop(sprint.id)}
-                >
-                  <h2 className="text-base font-semibold mb-3 flex items-center gap-2 flex-shrink-0">
-                    🎯 Sprint {sprint.sprint_number}
-                    <span className="text-xs bg-zinc-700 px-2 py-0.5 rounded-full">
-                      {getSprintTasks(sprint.sprint_number).length}
-                    </span>
-                  </h2>
-                  <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                    {getSprintTasks(sprint.sprint_number).map(task => (
-                      <TaskCard 
-                        key={task.id} 
-                        task={task}
-                        isHighlight={highlightTask?.id === task.id}
-                      />
-                    ))}
-                    {getSprintTasks(sprint.sprint_number).length === 0 && (
-                      <p className="text-zinc-500 text-sm text-center py-8">
-                        Drop tasks here
-                      </p>
-                    )}
-                    
-                    {/* Completed tasks at bottom */}
-                    {getCompletedTasks(sprint.sprint_number).length > 0 && (
-                      <>
-                        <div className="border-t border-zinc-700/50 my-3"></div>
-                        <h3 className="text-xs font-semibold text-zinc-500 mb-2">✓ Completed</h3>
-                        {getCompletedTasks(sprint.sprint_number).map(task => (
-                          <TaskCard 
-                            key={task.id} 
-                            task={task}
-                            isHighlight={highlightTask?.id === task.id}
-                          />
-                        ))}
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+              {/* Columns */}
+              <div className="flex gap-3 h-[calc(100vh-280px)]">
+                <Column
+                  title="Backlog"
+                  icon="📥"
+                  tasks={backlogTasks}
+                  highlightTaskId={highlightTask?.id}
+                  onCompleteTask={handleCompleteTask}
+                  onToggleHighlight={handleToggleHighlight}
+                  onDragStart={handleTaskMouseDown}
+                  onDragOver={handleColumnMouseEnter}
+                  onDrop={handleMouseUp}
+                  dragOverColumn={dragOverColumn}
+                  sprintId={null}
+                  draggable={viewMode === 'configure'}
+                />
+                {sprints.map(sprint => (
+                  <Column
+                    key={sprint.id}
+                    title={`Sprint ${sprint.sprint_number}`}
+                    icon="🎯"
+                    tasks={getSprintTasks(sprint.sprint_number)}
+                    highlightTaskId={highlightTask?.id}
+                    onCompleteTask={handleCompleteTask}
+                    onToggleHighlight={handleToggleHighlight}
+                    onDragStart={handleTaskMouseDown}
+                    onDragOver={handleColumnMouseEnter}
+                    onDrop={handleMouseUp}
+                    dragOverColumn={dragOverColumn}
+                    sprintId={sprint.id}
+                    draggable={viewMode === 'configure'}
+                  />
+                ))}
+              </div>
+            </>
           )}
 
           {/* FOCUS VIEW */}
@@ -524,16 +391,14 @@ export default function Home() {
                 <section className="mb-6">
                   <h2 className="text-base font-semibold mb-3">⚡ How&apos;s your energy?</h2>
                   <div className="flex gap-2">
-                    {(["low", "medium", "high"] as const).map((level) => (
+                    {(['low', 'medium', 'high'] as const).map((level) => (
                       <button
                         key={level}
                         onClick={() => handleEnergySelect(level)}
                         className={`px-4 py-2 rounded-lg font-medium capitalize text-sm transition-all ${
                           energyLevel === level
-                            ? level === "low" 
-                              ? "bg-red-500 text-white"
-                              : level === "medium"
-                                ? "bg-yellow-500 text-black"
+                            ? level === "low" ? "bg-red-500 text-white"
+                              : level === "medium" ? "bg-yellow-500 text-black"
                                 : "bg-green-500 text-white"
                             : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                         }`}
@@ -549,87 +414,18 @@ export default function Home() {
               {!focusMode && (
                 <section className="mb-6">
                   <h2 className="text-base font-semibold mb-3">🎯 Today&apos;s Highlight</h2>
-                  
-                  {highlightTask ? (
-                    <div className={`p-4 rounded-lg border ${
-                      highlightCompleted 
-                        ? 'bg-green-500/10 border-green-500/50' 
-                        : 'bg-zinc-800/50 border-zinc-700/50'
-                    }`}>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={handleCompleteHighlight}
-                          className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                            highlightCompleted 
-                              ? "border-green-500 bg-green-500" 
-                              : "border-zinc-600 hover:border-green-500"
-                          }`}
-                        >
-                          {highlightCompleted && <span className="text-black text-xs">✓</span>}
-                        </button>
-                        <div className="flex-1">
-                          <p className={`font-medium ${highlightCompleted ? 'line-through text-zinc-500' : ''}`}>
-                            {highlightTask.title}
-                          </p>
-                          {highlightTask.time_estimate_minutes && (
-                            <p className="text-sm text-zinc-500">
-                              ⏱️ {formatTime(highlightTask.time_estimate_minutes)}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={handleClearHighlight}
-                          className="text-zinc-500 hover:text-zinc-300 p-1"
-                          title="Clear highlight"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <button
-                        onClick={() => setShowHighlightPicker(!showHighlightPicker)}
-                        className="w-full p-4 rounded-lg border border-dashed border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 transition-colors text-left"
-                      >
-                        + Set your #1 priority for today
-                      </button>
-                      
-                      {showHighlightPicker && (
-                        <div className="mt-2 bg-zinc-800/80 rounded-lg border border-zinc-700 max-h-60 overflow-y-auto">
-                          {activeTasks.length === 0 ? (
-                            <p className="p-4 text-zinc-500 text-sm">No tasks available</p>
-                          ) : (
-                            activeTasks.map(task => (
-                              <button
-                                key={task.id}
-                                onClick={() => handleSetHighlight(task.id)}
-                                className="w-full p-3 text-left hover:bg-zinc-700/50 border-b border-zinc-700/50 last:border-0"
-                              >
-                                <p className="font-medium text-sm">{task.title}</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className={`px-2 py-0.5 text-xs rounded ${categoryColors[task.category]}`}>
-                                    {task.category}
-                                  </span>
-                                  {task.time_estimate_minutes && (
-                                    <span className="text-xs text-zinc-500">
-                                      ⏱️ {formatTime(task.time_estimate_minutes)}
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <HighlightBanner
+                    highlightTask={highlightTask}
+                    highlightCompleted={highlightCompleted}
+                    isPast4PM={currentIsPast4PM}
+                    onComplete={handleCompleteHighlight}
+                    onClear={handleClearHighlight}
+                  />
                 </section>
               )}
 
               {/* Current Sprint Tasks */}
               <section>
-                {/* Sprint Selector - Right above tasks */}
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-base font-semibold">🏃 Sprint</span>
                   <div className="flex bg-zinc-800 rounded-lg p-1">
@@ -650,8 +446,8 @@ export default function Home() {
                   <button
                     onClick={() => setShowCompleted(!showCompleted)}
                     className={`ml-auto px-3 py-1 rounded-lg font-medium text-sm transition-colors ${
-                      showCompleted 
-                        ? 'bg-green-500/20 text-green-400 border border-green-500/50' 
+                      showCompleted
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                         : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                     }`}
                   >
@@ -789,6 +585,44 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Floating drag preview */}
+      {draggedTask && dragPosition && (() => {
+        const task = tasks.find(t => t.id === draggedTask);
+        if (!task) return null;
+        return (
+          <div
+            className="fixed pointer-events-none z-50"
+            style={{ left: dragPosition.x + 10, top: dragPosition.y + 10 }}
+          >
+            <div className="p-3 bg-zinc-800/95 rounded-lg border border-green-500 shadow-2xl max-w-xs">
+              <div className="flex items-start gap-2">
+                <div className={`mt-1 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                  task.completed ? "border-green-500 bg-green-500" : "border-zinc-600"
+                }`}>
+                  {task.completed && <span className="text-black text-xs">✓</span>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium text-sm ${task.completed ? 'line-through text-zinc-500' : ''}`}>
+                    {task.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className={`px-2 py-0.5 text-xs rounded ${categoryColors[task.category]}`}>
+                      {task.category}
+                    </span>
+                    {task.time_estimate_minutes && (
+                      <span className="text-xs text-zinc-500">⏱️ {formatTime(task.time_estimate_minutes)}</span>
+                    )}
+                    {task.deadline && (
+                      <span className="text-xs text-purple-400">📅 {new Date(task.deadline).toLocaleDateString()}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
