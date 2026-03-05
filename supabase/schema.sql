@@ -22,6 +22,9 @@ CREATE TABLE tasks (
   completed BOOLEAN DEFAULT FALSE,
   time_estimate_minutes INTEGER,
   sprint_id UUID REFERENCES sprints(id),
+  skip_count INTEGER DEFAULT 0,
+  last_moved_by TEXT DEFAULT 'system' CHECK (last_moved_by IN ('user', 'system')),
+  last_moved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -12,6 +12,7 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [energyLevel, setEnergyLevel] = useState<EnergyLevel>("medium");
+  const [taskStats, setTaskStats] = useState({ urgent: 0, admin: 0, creative: 0, deadline: 0 });
   const [focusMode, setFocusMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -26,7 +27,6 @@ export default function Home() {
   const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [test4PM, setTest4PM] = useState(false);
-  const [show4PMWarning, setShow4PMWarning] = useState(false);
 
   // Derived state
   const activeTasks = tasks.filter(t => !t.completed);
@@ -46,19 +46,6 @@ export default function Home() {
     const sprint = sprints.find(s => s.sprint_number === sprintNumber);
     return tasks.filter(t => t.completed && t.sprint_id === sprint?.id);
   };
-
-  // 4pm Rule check
-  useEffect(() => {
-    const check4PMRule = () => {
-      if ((test4PM || isPast4PM()) && highlightTask && !highlightCompleted) {
-        setShow4PMWarning(true);
-        setTimeout(() => setShow4PMWarning(false), 5000);
-      }
-    };
-    check4PMRule();
-    const interval = setInterval(check4PMRule, 60000);
-    return () => clearInterval(interval);
-  }, [highlightTask, highlightCompleted, test4PM]);
 
   // Update time
   useEffect(() => {
@@ -84,6 +71,7 @@ export default function Home() {
         if (data.energyLevel) setEnergyLevel(data.energyLevel);
         if (data.highlightTask) setHighlightTask(data.highlightTask);
         if (typeof data.highlightCompleted === 'boolean') setHighlightCompleted(data.highlightCompleted);
+        if (data.stats) setTaskStats(data.stats);
       }
     } catch (error) {
       console.error("Failed to load data:", error);
@@ -167,8 +155,9 @@ export default function Home() {
       await fetch("/api/sprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "assignTask", taskId: draggedTask, sprintId: targetId }),
+        body: JSON.stringify({ action: "assignTask", taskId: draggedTask, sprintId: targetId, movedBy: "user" }),
       });
+      fetchData(); // Refresh data after drag
     }
     setDraggedTask(null);
     setDragPosition(null);
@@ -260,7 +249,17 @@ export default function Home() {
     });
   };
 
-  // Remove duplicate handleCompleteTask definition
+  const handleDailyReset = async () => {
+    const res = await fetch("/api/sprint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "dailyReset" }),
+    });
+    const data = await res.json();
+    alert(`Daily reset complete! ${data.resetCount} tasks moved to backlog.`);
+    fetchData();
+  };
+
   const currentIsPast4PM = test4PM || isPast4PM();
 
   if (loading) {
@@ -284,7 +283,7 @@ export default function Home() {
             <h1 className="text-lg font-bold">🏃 Sprint Dashboard</h1>
             <div className="flex bg-zinc-800 rounded-lg p-1">
               <button
-                onClick={() => setViewMode('focus')}
+                onClick={() => { setViewMode('focus'); fetchData(); }}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
                   viewMode === 'focus' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
                 }`}
@@ -318,6 +317,13 @@ export default function Home() {
               🧪 4PM
             </button>
             <button
+              onClick={handleDailyReset}
+              className="px-3 py-1.5 rounded-lg font-medium text-sm bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+              title="Test daily reset - move incomplete sprint tasks to backlog"
+            >
+              🔄 Reset
+            </button>
+            <button
               onClick={handleSync}
               disabled={syncing}
               className="px-3 py-1.5 rounded-lg font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 disabled:opacity-50 text-sm"
@@ -342,18 +348,6 @@ export default function Home() {
       <main className="p-3">
         <div className="h-full">
           {/* 4PM Toast */}
-          {show4PMWarning && !focusMode && (
-            <div className="fixed top-4 right-4 z-50 animate-slide-in">
-              <div className="p-4 bg-red-500/90 text-white rounded-lg shadow-lg flex items-center gap-3">
-                <span className="text-xl">⚠️</span>
-                <div>
-                  <p className="font-medium">4 PM Rule!</p>
-                  <p className="text-sm text-red-100">Time to focus on your highlight!</p>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* CONFIGURE VIEW */}
           {viewMode === 'configure' && !focusMode && (
             <>
@@ -548,19 +542,19 @@ export default function Home() {
                   <h2 className="text-base font-semibold mb-3">📊 Today&apos;s Overview</h2>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
-                      <p className="text-2xl font-bold text-red-400">{tasks.filter(t => t.category === 'urgent' && !t.completed).length}</p>
+                      <p className="text-2xl font-bold text-red-400">{taskStats.urgent}</p>
                       <p className="text-xs text-zinc-500">Urgent</p>
                     </div>
                     <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
-                      <p className="text-2xl font-bold text-yellow-400">{tasks.filter(t => t.category === 'admin' && !t.completed).length}</p>
+                      <p className="text-2xl font-bold text-yellow-400">{taskStats.admin}</p>
                       <p className="text-xs text-zinc-500">Admin</p>
                     </div>
                     <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
-                      <p className="text-2xl font-bold text-blue-400">{tasks.filter(t => t.category === 'creative' && !t.completed).length}</p>
+                      <p className="text-2xl font-bold text-blue-400">{taskStats.creative}</p>
                       <p className="text-xs text-zinc-500">Creative</p>
                     </div>
                     <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
-                      <p className="text-2xl font-bold text-purple-400">{tasks.filter(t => t.category === 'deadline' && !t.completed).length}</p>
+                      <p className="text-2xl font-bold text-purple-400">{taskStats.deadline}</p>
                       <p className="text-xs text-zinc-500">Deadline</p>
                     </div>
                   </div>

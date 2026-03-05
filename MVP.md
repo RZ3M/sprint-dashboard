@@ -78,6 +78,9 @@
  "completed": false,
  "time_estimate_minutes": "number | null",
  "sprint_id": "uuid | null",
+ "skip_count": 0,
+ "last_moved_by": "user | system",
+ "last_moved_at": "ISO date",
  "created_at": "ISO date"
 }
 ```
@@ -204,9 +207,11 @@
 | 17 | Daily highlight UI | ✅ Done |
 | 18 | Sprint timer | 🔲 |
 | 19 | Work logging (auto) | 🔲 |
-| 20 | 4 PM rule notification | ✅ Done |
+| 20 | 4 PM rule (warning on tasks) | ✅ Done |
 | 21 | 9 PM hard stop | 🔲 |
 | 22 | Weekly LLM insights | 🔲 |
+| 23 | Daily reset (auto move to backlog) | ✅ Done |
+| 24 | Skip count (auto-urgent at 3) | ✅ Done |
 
 ---
 
@@ -235,4 +240,28 @@
 
 ---
 
-*Last updated: 2026-03-03*
+## 📝 Session Notes (2026-03-04)
+
+### Today's Work
+- **Daily Highlight Feature**: Set #1 priority per day, syncs with task completion
+- **4 PM Rule**: Warning tag appears on highlight task after 4pm (no toast)
+- **Daily Reset**: End-of-day logic to move incomplete sprint tasks back to backlog
+- **Skip Counter**: Tracks how many times a task was skipped → auto-marks urgent at 3
+- **User vs System Moves**: Dragging task to backlog = user move (doesn't count as skip)
+- **Stats Fix**: Overview in Focus view now only shows today's sprint tasks (not backlog)
+- **Timezone Fix**: Fixed Toronto timezone calculation for sprints
+
+### New Database Fields
+- `tasks.skip_count` - Increments on system-initiated moves to backlog
+- `tasks.last_moved_by` - 'user' or 'system'
+- `tasks.last_moved_at` - Timestamp of last move
+
+### Key Behaviors
+- Configure view: Shows backlog + today's 4 sprints
+- Focus view: Shows selected sprint tasks only
+- Overview stats: Only counts tasks in today's sprints
+- Daily reset: Only moves tasks that were in today's sprints (not old sprint IDs)
+
+---
+
+*Last updated: 2026-03-04*

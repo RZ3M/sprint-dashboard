@@ -66,9 +66,21 @@ export async function GET() {
       highlightCompleted = task?.completed ?? false;
     }
 
+    // Filter tasks: backlog (no sprint_id) + today's sprints for display
+    const todaySprintIds = (allSprints || []).map(s => s.id);
     const taskList = tasks || [];
-    const completed = taskList.filter(t => t.completed);
-    const active = taskList.filter(t => !t.completed);
+    const displayTasks = taskList.filter(t => 
+      t.sprint_id === null || todaySprintIds.includes(t.sprint_id)
+    );
+
+    // Filter tasks: today's sprints ONLY for stats
+    const todayTasks = taskList.filter(t => todaySprintIds.includes(t.sprint_id));
+
+    const completed = displayTasks.filter(t => t.completed);
+    const active = displayTasks.filter(t => !t.completed);
+    
+    // Stats based on today's sprint tasks only
+    const statsActive = todayTasks.filter(t => !t.completed);
 
     return NextResponse.json({
       tasks: active,
@@ -78,10 +90,10 @@ export async function GET() {
       highlightTask: highlightTask,
       highlightCompleted: highlightCompleted,
       stats: {
-        urgent: active.filter(t => t.category === 'urgent').length,
-        admin: active.filter(t => t.category === 'admin').length,
-        creative: active.filter(t => t.category === 'creative').length,
-        deadline: active.filter(t => t.category === 'deadline').length,
+        urgent: statsActive.filter(t => t.category === 'urgent').length,
+        admin: statsActive.filter(t => t.category === 'admin').length,
+        creative: statsActive.filter(t => t.category === 'creative').length,
+        deadline: statsActive.filter(t => t.category === 'deadline').length,
       }
     });
 
@@ -94,7 +106,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, taskId, sprintId, energyLevel } = body;
+    const { action, taskId, sprintId, energyLevel, movedBy } = body;
     
     const supabase = createAdminClient();
     const today = getTorontoDateString();
@@ -134,13 +146,75 @@ export async function POST(request: Request) {
 
     if (action === 'assignTask') {
       // sprintId null = backlog
+      // Track who moved the task (user or system)
+      const isUserMove = movedBy === 'user';
+      
       const { error } = await supabase
         .from('tasks')
-        .update({ sprint_id: sprintId, updated_at: new Date().toISOString() })
+        .update({ 
+          sprint_id: sprintId, 
+          last_moved_by: isUserMove ? 'user' : 'system',
+          last_moved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', taskId);
 
       if (error) return NextResponse.json({ error: 'Failed to assign task' }, { status: 500 });
       return NextResponse.json({ success: true });
+    }
+
+    if (action === 'dailyReset') {
+      // This action is called at end of day to:
+      // 1. Move incomplete tasks to backlog
+      // 2. Increment skip_count for tasks that were in sprints (not user-moved)
+      // 3. Mark tasks with skip_count >= 3 as urgent
+      
+      // Get today's sprint IDs
+      const { data: todaySprints } = await supabase
+        .from('sprints')
+        .select('id')
+        .eq('date', today);
+      
+      const todaySprintIds = todaySprints?.map(s => s.id) || [];
+      
+      if (todaySprintIds.length === 0) {
+        return NextResponse.json({ success: true, resetCount: 0, message: 'No sprints found for today' });
+      }
+
+      // Get all active tasks that are in today's sprints
+      const { data: incompleteTasks } = await supabase
+        .from('tasks')
+        .select('id, sprint_id, skip_count, category, last_moved_by')
+        .eq('completed', false)
+        .in('sprint_id', todaySprintIds);
+
+      let resetCount = 0;
+      
+      if (incompleteTasks && incompleteTasks.length > 0) {
+        // Increment skip_count for tasks that weren't manually moved by user
+        const tasksToSkip = incompleteTasks.filter(t => t.last_moved_by !== 'user');
+        
+        for (const task of tasksToSkip) {
+          const newSkipCount = (task.skip_count || 0) + 1;
+          const newCategory = newSkipCount >= 3 ? 'urgent' : task.category;
+          
+          await supabase
+            .from('tasks')
+            .update({ 
+              skip_count: newSkipCount,
+              category: newCategory,
+              sprint_id: null, // Move to backlog
+              last_moved_by: 'system',
+              last_moved_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', task.id);
+          
+          resetCount++;
+        }
+      }
+
+      return NextResponse.json({ success: true, resetCount });
     }
 
     if (action === 'setHighlight') {

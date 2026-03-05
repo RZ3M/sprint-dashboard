@@ -9,6 +9,9 @@ export interface Task {
   created_at: string;
   time_estimate_minutes: number | null;
   sprint_id: string | null;
+  skip_count?: number;
+  last_moved_by?: 'user' | 'system';
+  last_moved_at?: string;
 }
 
 export interface Sprint {
