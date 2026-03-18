@@ -48,3 +48,22 @@ export interface APIError {
 export interface APISuccess {
   success: boolean;
 }
+
+export interface WorkLog {
+  id: string;
+  date: string;
+  task_id: string | null;
+  sprint_category: 'urgent' | 'admin' | 'creative' | 'deadline';
+  duration_minutes: number;
+  energy_level: 'low' | 'medium' | 'high';
+  notes: string;
+  created_at: string;
+  task_title?: string;
+}
+
+export interface TimerState {
+  isRunning: boolean;
+  remainingSeconds: number;
+  sprintId: string | null;
+  startedAt: number | null;
+}

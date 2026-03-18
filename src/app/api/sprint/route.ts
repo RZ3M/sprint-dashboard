@@ -277,6 +277,55 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'logWork') {
+      const { taskId, sprintCategory, durationMinutes, energyLevel, notes } = body;
+      
+      const { error } = await supabase
+        .from('work_logs')
+        .insert({
+          date: today,
+          task_id: taskId || null,
+          sprint_category: sprintCategory || null,
+          duration_minutes: durationMinutes || 0,
+          energy_level: energyLevel || 'medium',
+          notes: notes || '',
+        });
+
+      if (error) {
+        console.error('Failed to log work:', error);
+        return NextResponse.json({ error: 'Failed to log work' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'getWorkLogs') {
+      const { data: workLogs } = await supabase
+        .from('work_logs')
+        .select('*')
+        .eq('date', today)
+        .order('created_at', { ascending: false });
+
+      let logsWithTasks = workLogs || [];
+      if (logsWithTasks.length > 0) {
+        const taskIds = logsWithTasks.filter(l => l.task_id).map(l => l.task_id);
+        if (taskIds.length > 0) {
+          const { data: tasks } = await supabase
+            .from('tasks')
+            .select('id, title')
+            .in('id', taskIds);
+          
+          const taskMap: Record<string, string> = {};
+          (tasks || []).forEach(t => { taskMap[t.id] = t.title; });
+          logsWithTasks = logsWithTasks.map(l => ({
+            ...l,
+            task_title: l.task_id ? taskMap[l.task_id] || 'Deleted task' : null
+          }));
+        }
+      }
+
+      return NextResponse.json({ workLogs: logsWithTasks });
+    }
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 
   } catch (error) {

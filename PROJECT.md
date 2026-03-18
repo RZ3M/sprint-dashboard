@@ -21,7 +21,10 @@ sprint-dashboard/
 │   │   ├── types.ts              # Shared TypeScript interfaces
 │   │   ├── TaskCard.tsx          # Task rendering (configure view)
 │   │   ├── Column.tsx            # Sprint/backlog column
-│   │   └── HighlightBanner.tsx   # Daily highlight display
+│   │   ├── HighlightBanner.tsx   # Daily highlight display
+│   │   ├── SprintTimer.tsx       # Sprint countdown with pause/resume
+│   │   ├── WorkLogList.tsx       # Work log display and entry
+│   │   └── HardStop.tsx          # 9PM lockout screen
 │   └── lib/
 │       ├── utils.ts              # Client utilities (formatTime, categoryColors, etc.)
 │       └── server-utils.ts       # Server utilities (timezone)
@@ -127,9 +130,8 @@ const handleToggleHighlight = async (taskId: string) => {
 
 | Phase | Features |
 |-------|----------|
-| ✅ Done | Brain dump, 4 sprints, Drag & drop, Daily highlight, 4PM rule |
-| Next | Sprint timer, Work logging, 9PM hard stop |
-| Later | Brain dump v2, Master document view, Weekly insights |
+| ✅ Done | Brain dump, 4 sprints, Drag & drop, Daily highlight, 4PM rule, Sprint timer, Work logging, 9PM hard stop |
+| Next | Brain dump v2, Master document view, Weekly insights |
 
 ---
 

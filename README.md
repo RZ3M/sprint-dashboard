@@ -10,6 +10,9 @@ Energy-based sprint batching system for focused, intentional work. Organize task
 - **Daily Highlight** — Set your #1 priority task each day
 - **4 PM Rule** — Warning if your highlight hasn't been started by 4 PM
 - **Daily Reset** — Incomplete sprint tasks auto-return to backlog at end of day
+- **Sprint Timer** — 2-3 hr countdown with pause/resume and 5-minute warning
+- **Work Logging** — Auto-logs time and energy on task completion
+- **9 PM Hard Stop** — Full lockout screen with daily summary and snooze option
 - **Skip Counter** — Tasks skipped 3+ times auto-promote to urgent
 - **Energy Logging** — Track your energy level to optimize sprint planning
 - **Smart Triage** — Gmail & Calendar integration for auto-categorizing tasks
@@ -77,7 +80,10 @@ src/
 │   ├── types.ts              # Shared TypeScript interfaces
 │   ├── TaskCard.tsx          # Task card rendering
 │   ├── Column.tsx            # Sprint/backlog column
-│   └── HighlightBanner.tsx   # Daily highlight display
+│   ├── HighlightBanner.tsx   # Daily highlight display
+│   ├── SprintTimer.tsx       # Sprint countdown with pause/resume
+│   ├── WorkLogList.tsx       # Work log display and entry
+│   └── HardStop.tsx          # 9PM lockout screen
 └── lib/
     ├── utils.ts              # Client utilities
     └── server-utils.ts       # Server utilities (timezone)
@@ -87,12 +93,9 @@ src/
 
 See [MVP.md](./MVP.md) for the full feature spec and progress tracker.
 
-**Current status:** 18/24 MVP features complete
+**Current status:** 21/24 MVP features complete
 
 **Coming next:**
-- Sprint timer (2-3 hr countdown with pause/resume)
-- Work logging (auto-log time on task completion)
-- 9 PM hard stop
 - Brain Dump v2 (capture ideas, feelings, notes, goals)
 - Weekly LLM insights
 

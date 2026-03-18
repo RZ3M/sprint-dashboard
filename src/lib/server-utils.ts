@@ -15,3 +15,7 @@ export const getTorontoDateString = (): string => {
 export const isPast4PM = (): boolean => {
   return getTorontoDate().getHours() >= 16;
 };
+
+export const isPast9PM = (): boolean => {
+  return getTorontoDate().getHours() >= 21;
+};

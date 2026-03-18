@@ -2,6 +2,9 @@
 
 import { Task } from "./types";
 import { formatTime, categoryColors } from "../lib/utils";
+import { Badge } from "./ui/badge";
+import { Star, Clock, Calendar } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
   task: Task;
@@ -20,69 +23,91 @@ export function TaskCard({ task, isHighlight, onComplete, onToggleHighlight, onD
           onDragStart(task.id, e);
         }
       }}
-      className={`p-3 bg-zinc-800/50 rounded-lg border transition-all select-none ${
+      className={cn(
+        "p-3 rounded-lg border transition-all select-none group",
         isHighlight
-          ? 'border-green-500/50 bg-green-500/10'
-          : 'border-zinc-700/50 hover:bg-zinc-800'
-      } ${draggable ? 'cursor-grab' : ''}`}
+          ? "border-amber-500/30 bg-amber-500/5"
+          : "border-border bg-card hover:border-border/80 hover:bg-accent/30",
+        draggable && "cursor-grab active:cursor-grabbing"
+      )}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2.5">
+        {/* Completion button */}
         <button
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onComplete(task.id, task.completed);
           }}
-          className={`mt-1 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+          className={cn(
+            "mt-0.5 w-4 h-4 rounded-full border flex-shrink-0 flex items-center justify-center transition-all",
             task.completed
-              ? "border-green-500 bg-green-500"
-              : "border-zinc-600 hover:border-green-500"
-          }`}
-        >
-          {task.completed && <span className="text-black text-xs">✓</span>}
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className={`font-medium text-sm flex-1 ${task.completed ? 'line-through text-zinc-500' : ''}`}>
-              {task.title}
-            </p>
-          </div>
-          {task.description && (
-            <p className="text-xs text-zinc-500 mt-1">{task.description}</p>
+              ? "border-emerald-500 bg-emerald-500"
+              : "border-muted-foreground/40 hover:border-emerald-500"
           )}
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className={`px-2 py-0.5 text-xs rounded ${categoryColors[task.category]}`}>
+        >
+          {task.completed && (
+            <svg className="w-2.5 h-2.5 text-background" viewBox="0 0 10 10" fill="none">
+              <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </button>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <p className={cn(
+            "text-sm font-medium leading-snug",
+            task.completed ? "line-through text-muted-foreground" : "text-foreground"
+          )}>
+            {task.title}
+          </p>
+          {task.description && (
+            <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{task.description}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <Badge variant="secondary" className={cn("text-xs px-1.5 py-0 h-4", categoryBadgeColors[task.category])}>
               {task.category}
-            </span>
+            </Badge>
             {task.time_estimate_minutes && (
-              <span className="text-xs text-zinc-500">
-                ⏱️ {formatTime(task.time_estimate_minutes)}
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                <span className="font-mono">{formatTime(task.time_estimate_minutes)}</span>
               </span>
             )}
             {task.deadline && (
-              <span className="text-xs text-purple-400">
-                📅 {new Date(task.deadline).toLocaleDateString()}
+              <span className="text-xs text-violet-400 flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {new Date(task.deadline).toLocaleDateString()}
               </span>
             )}
           </div>
         </div>
-        {/* Star button to set as highlight */}
+
+        {/* Star button */}
         <button
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onToggleHighlight(task.id);
           }}
-          className={`ml-2 text-lg flex-shrink-0 transition-colors ${
+          className={cn(
+            "flex-shrink-0 p-0.5 rounded transition-colors",
             isHighlight
-              ? 'text-yellow-400'
-              : 'text-zinc-600 hover:text-yellow-400'
-          }`}
-          title={isHighlight ? 'Remove from highlight' : 'Set as highlight'}
+              ? "text-amber-400"
+              : "text-muted-foreground/30 hover:text-amber-400 opacity-0 group-hover:opacity-100"
+          )}
+          title={isHighlight ? "Remove from highlight" : "Set as highlight"}
         >
-          {isHighlight ? '⭐' : '☆'}
+          <Star className={cn("w-3.5 h-3.5", isHighlight && "fill-amber-400")} />
         </button>
       </div>
     </div>
   );
 }
+
+const categoryBadgeColors: Record<string, string> = {
+  urgent: "bg-red-500/15 text-red-400 hover:bg-red-500/15",
+  admin: "bg-amber-500/15 text-amber-400 hover:bg-amber-500/15",
+  creative: "bg-blue-500/15 text-blue-400 hover:bg-blue-500/15",
+  deadline: "bg-violet-500/15 text-violet-400 hover:bg-violet-500/15",
+};

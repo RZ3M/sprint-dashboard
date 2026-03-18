@@ -205,10 +205,9 @@
 | 15 | **Master Document View** | 🔲 |
 | 16 | Deadline category detection | 🔲 |
 | 17 | Daily highlight UI | ✅ Done |
-| 18 | Sprint timer | 🔲 |
-| 19 | Work logging (auto) | 🔲 |
-| 20 | 4 PM rule (warning on tasks) | ✅ Done |
-| 21 | 9 PM hard stop | 🔲 |
+| 18 | Sprint timer (#18) | ✅ Done | 2-3 hr countdown with pause/resume/reset, progress bar, 5-min warning, persistence across refreshes |
+| 19 | Work logging (#19) | ✅ Done | Auto-log time on task completion via `logWork` action, displays duration/category/energy per entry |
+| 21 | 9 PM hard stop (#21) | ✅ Done | Full-screen lockout with daily summary, snooze for 30 mins, tasks locked until tomorrow |
 | 22 | Weekly LLM insights | 🔲 |
 | 23 | Daily reset (auto move to backlog) | ✅ Done |
 | 24 | Skip count (auto-urgent at 3) | ✅ Done |
