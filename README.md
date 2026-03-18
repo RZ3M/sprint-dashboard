@@ -22,6 +22,8 @@ Energy-based sprint batching system for focused, intentional work. Organize task
 | Layer | Technology |
 |-------|-----------|
 | Frontend | Next.js 16 + React + Tailwind CSS |
+| UI Components | shadcn/ui |
+| Icons | Lucide React |
 | Database | Supabase (PostgreSQL) |
 | AI | OpenClaw (brain dump, triage, LLM analysis) |
 | Integrations | Gmail API, Google Calendar API |
