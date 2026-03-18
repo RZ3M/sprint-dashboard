@@ -21,15 +21,14 @@ sprint-dashboard/
 │   │   ├── types.ts              # Shared TypeScript interfaces
 │   │   ├── TaskCard.tsx          # Task rendering (configure view)
 │   │   ├── Column.tsx            # Sprint/backlog column
-│   │   ├── HighlightBanner.tsx   # Daily highlight display
-│   │   └── FocusTaskList.tsx     # Focus view task list
+│   │   └── HighlightBanner.tsx   # Daily highlight display
 │   └── lib/
 │       ├── utils.ts              # Client utilities (formatTime, categoryColors, etc.)
 │       └── server-utils.ts       # Server utilities (timezone)
 ├── supabase/
 │   └── schema.sql               # Database schema
 ├── MVP.md                       # Feature spec & roadmap
-└── CLAUDE.md                   # This file
+└── PROJECT.md                   # This file
 ```
 
 ---
@@ -114,7 +113,7 @@ const handleToggleHighlight = async (taskId: string) => {
 4. Update types if needed
 
 ### Adding New Task Action
-1. Add action handler in API POST
+1. Add action handler in API POST (e.g., dailyReset, assignTask)
 2. Add handler function in page.tsx
 3. Use optimistic updates
 
@@ -144,6 +143,8 @@ const handleToggleHighlight = async (taskId: string) => {
 - **Build fails:** Check imports — use `../` for components, `../../lib/` for utils
 - **Type errors:** Ensure types imported from `components/types.ts`
 - **Stale data:** Call `fetchData()` after mutations
+- **Tasks not showing:** Check if sprint_id matches today's sprints (not old dates)
+- **Timezone:** Always use getTorontoDateString() for dates, not ISO directly
 
 ---
 
@@ -158,4 +159,4 @@ npm run start   # Start production server
 
 ---
 
-*Last updated: 2026-03-04*
+*Last updated: 2026-03-05*

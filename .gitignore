@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# credentials & secrets
+credentials.json
+
+# local data (synced from Supabase, not needed in git)
+/data/

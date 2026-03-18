@@ -5,7 +5,6 @@ import { Task, Sprint, ViewMode, EnergyLevel, SprintAPIResponse } from "../compo
 import { TaskCard } from "../components/TaskCard";
 import { HighlightBanner } from "../components/HighlightBanner";
 import { Column } from "../components/Column";
-import { FocusTaskList } from "../components/FocusTaskList";
 import { getTorontoDateString, formatTime, isPast4PM, getTorontoDate, categoryColors } from "../lib/utils";
 
 export default function Home() {
